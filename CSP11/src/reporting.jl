@@ -30,28 +30,38 @@ function reformat_weights(weights::AbstractVecOrMat{Float64})
     return out
 end
 
-function get_reporting_hook(pth, domain)
+function get_reporting_hook(pth, domain; specase = :b)
 
     A = domain[:A]
     B = domain[:B]
     C = domain[:C]
 
     boundary = domain[:boundary]
-    # POP 1: (4500, 500)
-    # POP 2: (5100, 1100)
+    if specase == :b
+        pop_1_coords = [4500, 1, 1200-500]
+        pop_2_coords = [5100, 1, 1200-1100]
+        # POP 1: (4500, 500)
+        # POP 2: (5100, 1100)
+    elseif specase == :c
+        pop_1_coords = [4500, 2500, 1200-655]
+        pop_2_coords = [5100, 02500, 1200-1255]
+    else
+        @error "Only case b and c supported."
+    end
+    
 
     # pts = domain.representation.node_points
     pts = domain[:cell_centroids]
     pts = vec(reinterpret(Jutul.StaticArrays.SVector{3, Float64}, pts))
-    p1 = find_closest_point(pts, [4500, 1, 1200 - 500])
-    p2 = find_closest_point(pts, [5100, 1, 1200 - 1100])
+    p1 = find_closest_point(pts, pop_1_coords)
+    p2 = find_closest_point(pts, pop_1_coords)
 
     satnum = domain[:satnum]
     seal = findall(isequal(1), satnum)
     helper = CSP11ReportHelper(p1, p2, A, B, C, seal, boundary, path = pth)
 
     time = 0.0
-    file_pth = joinpath(pth, "spe11b_time_series.csv")
+    file_pth = joinpath(pth, "spe11$(specase)_time_series.csv")
     f = open(file_pth, "w")
     println(f, "# t [s], p1 [Pa], p2 [Pa], mobA [kg], immA [kg], dissA [kg], sealA [kg], mobB [kg], immB [kg], dissB [kg], sealB [kg], M_C [m], sealTot [kg], boundTot [kg]")
     close(f)

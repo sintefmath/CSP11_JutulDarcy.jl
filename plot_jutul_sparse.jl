@@ -1,13 +1,18 @@
 using CSV, DataFrames
 using Jutul
 
-name1 = "horizon-cut_100x50_thermal_cv"
-name2 = "horizon-cut_100x50_thermal_cv"
+specase1 = :b
+name1 = "struct819x117_thermal_cv"
+name2 = "cPEBI_819x117_thermal_cv"
 
-output_folder = jutul_output_path("spe11b_$name1", subfolder = "csp11")
-output_folder2 = jutul_output_path("spe11b_$name2", subfolder = "csp11")
+# specase = :c
+# name1 = "horz_ndg_cut_PG_50x50x50_thermal_cv"
+# name2 = "struct50x50x50_thermal_cv"
 
-file_name = "spe11b_time_series.csv"
+output_folder = jutul_output_path("spe11$(specase)_$name1", subfolder = "csp11")
+output_folder2 = jutul_output_path("spe11$(specase)_$name2", subfolder = "csp11")
+
+file_name = "spe11$(specase)_time_series.csv"
 
 function resample_table(t, vals)
     t_rep = 3.1536e6 # 0.1 year
@@ -59,10 +64,10 @@ end
 
 
 tab = read_file(joinpath(output_folder, file_name))
-tab_name = "Case1"
+tab_name = "C-F"
 
 tab2 = read_file(joinpath(output_folder2, file_name))
-tab2_name = "Case2"
+tab2_name = "cPEBI-F"
 ##
 # using CairoMakie
 using GLMakie

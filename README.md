@@ -1,6 +1,6 @@
 # CSP11_JutulDarcy.jl
 
-Simulate the [CSP11](https://www.spe.org/en/csp/) CO2 storage benchmark using [JutulDarcy.jl](https://github.com/sintefmath/JutulDarcy.jl) on meshes made in [MRST](https://mrst.no/). Currently contains scripts for case B only.
+Simulate the [CSP11](https://www.spe.org/en/csp/) CO2 storage benchmark using [JutulDarcy.jl](https://github.com/sintefmath/JutulDarcy.jl) on meshes made in [MRST](https://mrst.no/). Currently contains scripts for case B and C only.
 
 ## First time setup
 

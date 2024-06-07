@@ -1,10 +1,8 @@
 [deps]
 CSP11 = "48eaa45b-cddd-4e20-968f-8db8a6d464dd"
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
-CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
-GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
 GeoEnergyIO = "3b1dd628-313a-45bb-9d8d-8f3c48dcb5d4"
 HYPRE = "b5ffcf37-a2bd-41ab-a3da-4bd9bc8ad771"
 Jutul = "2b460a1a-8a2b-45b2-b125-b5c536396eb9"

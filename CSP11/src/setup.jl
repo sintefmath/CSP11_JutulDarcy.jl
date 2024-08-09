@@ -148,12 +148,17 @@ function reservoir_domain_and_wells_csp11(pth::AbstractString, case = :b; kwarg.
     C = raw_G["cells"]["fractionInC"]
 
     boundary = Int.(vec(raw_G["bufferCells"]))
-    domain[:A, nothing] = A
-    domain[:B, nothing] = B
-    domain[:C, nothing] = C
+    domain[:A, Cells()] = vec(A)
+    domain[:B, Cells()] = vec(B)
+    domain[:C, Cells()] = vec(C)
+    nc = number_of_cells(domain)
+    is_boundary = fill(false, nc)
+    for bcell in boundary
+        is_boundary[bcell] = true
+    end
+    domain[:is_boundary, Cells()] = is_boundary
     domain[:boundary, nothing] = boundary
 
-    
     # domain[:well_cells, nothing] = [wc1, wc2]
     return domain, wells
 end

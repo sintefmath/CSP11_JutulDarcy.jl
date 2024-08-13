@@ -15,7 +15,7 @@ function setup_spe11_case_from_mrst_grid(basename;
     dirname = joinpath(@__DIR__, "..", "..", "data")
 
     pth = joinpath(dirname, "$basename.mat")
-
+    @info pth
     domain, wells = reservoir_domain_and_wells_csp11(pth, case);
     composite = composite || thermal
 
@@ -83,17 +83,37 @@ end
 
 function reservoir_domain_and_wells_csp11(pth::AbstractString, case = :b; kwarg...)
     matdata = MAT.matread(pth)
-    raw_G = matdata["G"]
+    raw_rock = missing
+    if haskey(matdata, "G")
+        raw_G = matdata["G"]
+        if haskey(matdata, "rock")
+            raw_rock = matdata["rock"]
+        end
+    else
+        @assert haskey(matdata, "cells")
+        raw_G = matdata
+    end
     buffer_cells = Int.(vec(raw_G["bufferCells"]))
     G = UnstructuredMesh(MRSTWrapMesh(raw_G), z_is_depth = true)
-    raw_rock = matdata["rock"]
-    K = collect(raw_rock["perm"]')
-    @. K = max(K, 1e-10*si_unit(:darcy))
-    poro = collect(vec(raw_rock["poro"]))
-    poro[poro .< 0.05] .= 0.05
-    satnum = Int.(vec(raw_rock["regions"]["saturation"]))
+    satnum = Int.(vec(raw_G["cells"]["tag"]))
+    K, poro = rock_props_from_satnum(satnum, case)
+    if !ismissing(raw_rock)
+        Kr = collect(raw_rock["perm"]')
+        @. Kr = max(Kr, 1e-10*si_unit(:darcy))
+        poro_r = collect(vec(raw_rock["poro"]))
+        poro_r[poro_r .< 0.05] .= 0.05
+        satnum0 = Int.(vec(raw_rock["regions"]["saturation"]))
+        @assert all(satnum0 .== satnum)
+
+        norm(x) = sum(v -> v^2, x)^0.5
+        if norm(Kr-K)/norm(K) > 1e-10
+            @warn "Mismatch between rock in spec and .rock field. Using spec."
+        end
+        if norm(poro_r-poro)/norm(poro) > 1e-10
+            @warn "Mismatch between poro in spec and .rock field. Using spec."
+        end
+    end
     domain = reservoir_domain_csp11(G, case; satnum = satnum, permeability = K, porosity = poro, kwarg...)
-    # domain[:volumes] .= raw_G["cells"]["volumes"]
     @. domain[:volumes][buffer_cells] *= raw_G["bufferMult"]
     cc = domain[:cell_centroids]
     z = cc[3, :]
@@ -169,6 +189,7 @@ function reservoir_domain_csp11(G, case = :b; satnum, temperature = 333.15, kwar
     nc = number_of_cells(G)
     length(satnum) == nc || throw(ArgumentError("satnum must have number of cells entries ($nc), was $(length(satnum))"))
     domain = reservoir_domain(G; satnum = satnum, kwarg...)
+    # TODO: Move over perm and poro assignment here.
     if case == :b || case == :c
         rock_thermal_conductivity = fill(0.85, nc)
         diffusion = repeat([1e-9, 2e-8], 1, nc)
@@ -193,6 +214,33 @@ function reservoir_domain_csp11(G, case = :b; satnum, temperature = 333.15, kwar
     end
     domain[:temperature, Cells()] = temperature
     return domain
+end
+
+function rock_props_from_satnum(satnum, case)
+    n = length(satnum)
+    perm = zeros(3, n)
+    poro = zeros(n)
+    @assert minimum(satnum) >= 1
+    @assert maximum(satnum) <= 7
+    MINPERM = 1e-10*si_unit(:darcy)
+    MINPORO = 0.05
+    if case == :a
+        z_factor = 1.0
+        # Note: Last entry was 0, capped to very small perm and small poro
+        perm_reg = [4e-11, 5e-10, 1e-9, 2e-9, 4e-9, 1e-8, MINPERM]
+        poro_reg = [0.44, 0.43, 0.44, 0.45, 0.43, 0.46, MINPORO]
+    else
+        z_factor = 0.1
+        perm_reg = [1e-16, 1e-13, 2e-13, 5e-13, 1e-12, 2e-12, MINPERM]
+        poro_reg = [0.1, 0.2, 0.2, 0.2, 0.25, 0.35, MINPORO]
+    end
+    @assert length(perm_reg) == length(poro_reg) == 7
+    for (i, reg) in enumerate(satnum)
+        perm[1, i] = perm[2, i] = perm_reg[reg]
+        perm[3, i] = z_factor*perm_reg[reg]
+        poro[i] = poro_reg[reg]
+    end
+    return (perm, poro)
 end
 
 function setup_reservoir_model_csp11(reservoir::DataDomain; include_satfun = true, kwarg...)

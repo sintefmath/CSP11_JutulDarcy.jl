@@ -96,6 +96,7 @@ function reservoir_domain_and_wells_csp11(pth::AbstractString, case = :b; kwarg.
     buffer_cells = Int.(vec(raw_G["bufferCells"]))
     G = UnstructuredMesh(MRSTWrapMesh(raw_G), z_is_depth = true)
     satnum = Int.(vec(raw_G["cells"]["tag"]))
+    # TODO: Special perm transform for case C
     K, poro = rock_props_from_satnum(satnum, case)
     if !ismissing(raw_rock)
         Kr = collect(raw_rock["perm"]')

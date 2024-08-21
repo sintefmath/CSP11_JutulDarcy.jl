@@ -10,6 +10,7 @@ function setup_spe11_case_from_mrst_grid(basename;
         nstep_injection2 = 50,
         nstep_migration = 100,
         composite = false,
+        kgrad = :tpfa,
         kwarg...
     )
     dirname = joinpath(@__DIR__, "..", "..", "data")
@@ -25,7 +26,7 @@ function setup_spe11_case_from_mrst_grid(basename;
     else
         othername = "isothermal"
     end
-    name = "spe11$(case)_$(basename)_$othername"
+    name = "spe11$(case)_$(basename)_$(othername)_$kgrad"
 
     model, parameters = setup_reservoir_model_csp11(domain;
         wells = wells,
@@ -35,6 +36,7 @@ function setup_spe11_case_from_mrst_grid(basename;
         dT_max_abs = 30.0,
         composite = composite,
         split_wells = true,
+        kgrad = kgrad,
         kwarg...
     );
     ##

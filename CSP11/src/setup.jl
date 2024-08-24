@@ -16,8 +16,7 @@ function setup_spe11_case_from_mrst_grid(basename;
     dirname = joinpath(@__DIR__, "..", "..", "data")
 
     pth = joinpath(dirname, "$basename.mat")
-    @info pth
-    domain, wells = reservoir_domain_and_wells_csp11(pth, case);
+    domain, wells, matfile = reservoir_domain_and_wells_csp11(pth, case);
     composite = composite || thermal
 
     # return domain, wells
@@ -56,7 +55,7 @@ function setup_spe11_case_from_mrst_grid(basename;
         rate_injection1 = deepcopy(domain[:well_rates])
         rate_injection2 = deepcopy(rate_injection1)
         num_wells = domain[:num_well_cells]
-        rate_injection1[num_wells[1]+1:end] .= 0        
+        rate_injection1[num_wells[1]+1:end] .= 0
         well_labels = []
         for i = 0:sum(num_wells)-1
             push!(well_labels, Symbol(:INJ, i))
@@ -79,7 +78,7 @@ function setup_spe11_case_from_mrst_grid(basename;
 
     state0 = setup_state0_csp11(model, case) #check for c
 
-    case = JutulCase(model, dt, forces; state0 = state0, parameters = parameters)
+    case = JutulCase(model, dt, forces; state0 = state0, parameters = parameters, input_data = matfile)
     return (case, name)
 end
 
@@ -183,7 +182,7 @@ function reservoir_domain_and_wells_csp11(pth::AbstractString, case = :b; kwarg.
     domain[:boundary, nothing] = boundary
 
     # domain[:well_cells, nothing] = [wc1, wc2]
-    return domain, wells
+    return domain, wells, matdata
 end
 
 function reservoir_domain_csp11(G, case = :b; satnum, temperature = 333.15, kwarg...)

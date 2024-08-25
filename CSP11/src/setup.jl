@@ -46,8 +46,8 @@ function setup_spe11_case_from_mrst_grid(basename;
             ref_vol = 1.1232201600000005e12
             ref_pv = 2.5262622948600012e11
         end
-        pvt = sum(case.parameters[:Reservoir][:FluidVolume])
-        volt = sum(case.model[:Reservoir].data_domain[:volumes])
+        pvt = sum(parameters[:Reservoir][:FluidVolume])
+        volt = sum(model[:Reservoir].data_domain[:volumes])
         vol_err = abs(volt - ref_vol)/ref_vol
         if vol_err > 1e-3
             @warn "Mismatch in volume... $vol_err relative error"
@@ -135,7 +135,14 @@ function reservoir_domain_and_wells_csp11(pth::AbstractString, case = :b; kwarg.
         end
     end
     domain = reservoir_domain_csp11(G, case; satnum = satnum, permeability = K, porosity = poro, kwarg...)
-    @. domain[:volumes][buffer_cells] *= raw_G["bufferMult"]
+    volume = domain[:volumes]
+    for buffer_cell in buffer_cells
+        # TODO: Check this definition for B & C!
+        if satnum[buffer_cell] in (2, 3, 4, 5)
+            volume[buffer_cell] *= (1.0 + 5e4)
+        end
+    end
+    # @. domain[:volumes][buffer_cells] *= raw_G["bufferMult"]
     cc = domain[:cell_centroids]
     z = cc[3, :]
     z_mid = median(z)

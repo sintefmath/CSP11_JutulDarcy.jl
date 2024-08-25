@@ -48,7 +48,7 @@ function get_reporting_hook(pth, domain; specase = :b)
     else
         @error "Only case b and c supported."
     end
-    
+    # TODO: Put POPs into data_domain
 
     # pts = domain.representation.node_points
     pts = domain[:cell_centroids]

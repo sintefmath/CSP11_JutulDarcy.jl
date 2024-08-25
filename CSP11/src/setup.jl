@@ -138,7 +138,8 @@ function reservoir_domain_and_wells_csp11(pth::AbstractString, case = :b; kwarg.
     volume = domain[:volumes]
     for buffer_cell in buffer_cells
         # TODO: Check this definition for B & C!
-        if satnum[buffer_cell] in (2, 3, 4, 5)
+        # Set 6 as well following Jan's post.
+        if satnum[buffer_cell] in (2, 3, 4, 5, 6)
             volume[buffer_cell] *= (1.0 + 5e4)
         end
     end

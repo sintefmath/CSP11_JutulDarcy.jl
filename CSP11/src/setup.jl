@@ -37,8 +37,26 @@ function setup_spe11_case_from_mrst_grid(basename;
         split_wells = true,
         kgrad = kgrad,
         kwarg...
-    );
-    ##
+    )
+    if case == :b || case == :c
+        if case == :b
+            ref_vol = 9.302242084953952e7
+            ref_pv = 1.779359043963339e7
+        else
+            ref_vol = 1.1232201600000005e12
+            ref_pv = 2.5262622948600012e11
+        end
+        pvt = sum(case.parameters[:Reservoir][:FluidVolume])
+        volt = sum(case.model[:Reservoir].data_domain[:volumes])
+        vol_err = abs(volt - ref_vol)/ref_vol
+        if vol_err > 1e-3
+            @warn "Mismatch in volume... $vol_err relative error"
+        end
+        pv_err = abs(pvt - ref_pv)/ref_pv
+        if pv_err > 1e-3
+            @warn "Mismatch in pv... $pv_err relative error"
+        end
+    end
     if case == :b
         forces, dt = CSP11.setup_reservoir_forces_and_timesteps_csp11(model,
             case,
@@ -99,7 +117,8 @@ function reservoir_domain_and_wells_csp11(pth::AbstractString, case = :b; kwarg.
     satnum = Int.(vec(raw_G["cells"]["tag"]))
     # TODO: Special perm transform for case C
     K, poro = rock_props_from_satnum(satnum, case)
-    if !ismissing(raw_rock)
+    if !ismissing(raw_rock) && case == :b
+        # TODO: Check C as well.
         Kr = collect(raw_rock["perm"]')
         @. Kr = max(Kr, 1e-10*si_unit(:darcy))
         poro_r = collect(vec(raw_rock["poro"]))

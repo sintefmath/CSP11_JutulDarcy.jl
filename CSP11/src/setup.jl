@@ -9,6 +9,7 @@ function setup_spe11_case_from_mrst_grid(basename;
         nstep_injection1 = 50,
         nstep_injection2 = 50,
         nstep_migration = 100,
+        use_reporting_steps = false,
         composite = false,
         kgrad = :tpfa,
         kwarg...
@@ -68,6 +69,7 @@ function setup_spe11_case_from_mrst_grid(basename;
             nstep_injection1 = nstep_injection1,
             nstep_injection2 = nstep_injection2,
             nstep_migration = nstep_migration,
+            use_reporting_steps = use_reporting_steps
         );
     elseif case == :c
         rate_injection1 = deepcopy(domain[:well_rates])
@@ -329,10 +331,21 @@ function setup_reservoir_forces_and_timesteps_csp11(model, case = :b;
         time_migration = 1000*spe11_year - time_injection1 - time_injection2,
         rate_injection1 = (0.035, 0.0).*si_unit(:kilogram)./si_unit(:second),
         rate_injection2 = (0.035, 0.035).*si_unit(:kilogram)./si_unit(:second),
+        use_reporting_steps = false,
         injection_temperature = convert_to_si(10, :Celsius)
     )
     if !(case == :b || case == :c)
         throw(ArgumentError("Only case b and c supported at the moment."))
+    end
+
+    if use_reporting_steps
+        @info "Using sequence of time-steps required for reporting... Overriding any kwarg set."
+        # 5 year intervals, 25 years
+        nstep_initialization = 1
+        nstep_injection1 = 5
+        nstep_injection2 = 5
+        # 1000 - 2*25 = 950 / 5 = 190
+        nstep_migration = 190
     end
 
     tables = JutulDarcy.CO2Properties.co2_brine_property_tables()
@@ -398,6 +411,9 @@ function setup_reservoir_forces_and_timesteps_csp11(model, case = :b;
 
         # Finally migrate a bit.
         new_period!(time_migration, nstep_migration, no_forces)
+    end
+    if use_reporting_steps
+        @assert length(dt) == 201
     end
 
     return (forces, dt)

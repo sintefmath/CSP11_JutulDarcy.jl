@@ -155,3 +155,51 @@ function sealing_co2(state, cells)
     end
     return tot
 end
+
+function map_to_reporting_grid(state, weights, total_weights, dims)
+    # x [m], z [m], pressure [Pa], gas saturation [-], mass fraction of CO2 in liquid [-],
+    # mass fraction of H20 in vapor [-], phase mass density gas [kg/m3],
+    # phase mass density water [kg/m3], total mass CO2 [kg] T[C]
+    # In file spe11b_spatial_map_<Y>y.csv
+    # Give data in reference configuration.
+    # Do this in two parts, this part only does the mapping
+    # The origin of the coordinate system should be located in the lower-left corner with the x-axis positively
+    # oriented towards the right and the z-axis positively oriented towards the top. (The reported x and y
+    # values refer to the lower-left corners of each cell in the uniform report grid.) Moreover, note that
+    # intensive variables (pressure, saturation, and mass fractions) should be reported as cell-center values,
+    # while extensive variables (total mass) should be reported as integral/average values for the cell
+    is_case_b = length(dims) == 2
+    # total_weights tell us how much weight a cell has been assigned in total
+    # relative weight of a total mass for a given cell is w_i / total_weights to
+    # give the fraction of the total mass assigned to a cell. Sum it up directly
+    # from there.
+    @info "!!" weights
+    error()
+end
+
+function map_to_reporting_grid(case, states::AbstractVector)
+    yr = spe11_year
+    # Double check that the case matches the reporting intervals
+    @assert case.dt[1] ≈ 1000yr
+    @assert length(case.dt) == 201
+    for i in 1:200
+        @assert case.dt[i+1] ≈ 5yr
+    end
+    nc = number_of_cells(case.model[:Reservoir].domain)
+    rg = case.input_data["G"]["reportingGrid"]
+    w = case.input_data["G"]["reportingGrid"]["map"][:, 3]
+    I = Int.(case.input_data["G"]["reportingGrid"]["map"][:, 1])
+    J = Int.(case.input_data["G"]["reportingGrid"]["map"][:, 2])
+
+    dims = Int.(rg["dims"])
+    weights = [(I[i], J[i], w[i]) for i in eachindex(w, I, J)]
+    @assert maximum(I) == prod(dims)
+    @assert maximum(J) == nc
+
+    total_weights = zeros(nc)
+    for (j, w_i) in zip(J, w)
+        total_weights[j] += w_i
+    end
+
+    return map(x -> map_to_reporting_grid(x, weights, total_weights, dims), states[2:end])
+end

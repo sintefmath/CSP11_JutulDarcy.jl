@@ -18,7 +18,7 @@ function CSP11ReportHelper(p1, p2, A, B, C, sealing, boundary, satnum; path)
 end
 
 mutable struct CSP11ReportHandler
-    helper::Union{CSP11ReportHelper{Float64}, Nothing}
+    helper::Union{CSP11ReportHelper{Tuple{Int64, Float64}}, Nothing}
     time::Float64
 end
 
@@ -67,7 +67,6 @@ function CSP11ReportHelper(domain; path, specase)
 end
 
 function get_reporting_hook(pth, domain; specase = :b)
-    helper = CSP11ReportHelper(domain, path = pth, specase = :b)
     # Create file
     file_pth = joinpath(pth, "spe11$(specase)_time_series.csv")
     f = open(file_pth, "w")
@@ -78,33 +77,45 @@ function get_reporting_hook(pth, domain; specase = :b)
     # relative permeability exceeds 0); 2. immobile free phase (CO2 at
     # saturations for which the non-wetting relative permeability equals 0); 3.
     # dissolved (CO2 in water phase)
-    # fmt = x -> round(x, sigdigits = 16)
-    fmt = x -> x
-    time_offset = 1000.0*spe11_year
-    time = 0.0
+    handler = CSP11ReportHandler(nothing, 0.0)
+
     function hook(done, report, sim, dt, forces, max_iter, cfg)
+        if isnothing(handler.helper)
+            @info "Setting up helper..."
+            rmodel = reservoir_model(sim.model)
+            handler.helper = CSP11ReportHelper(rmodel.data_domain, path = file_pth, specase = :b)
+        end
+        time_offset = 1000.0*spe11_year
+
         if report[:success]
-            time += report[:dt]
-            if time - time_offset >= 0.0
+            handler.time += report[:dt]
+            if handler.time - time_offset >= 0.0
                 state = sim.storage.state0.Reservoir
-                p_at_1 = state.Pressure[helper.P1]
-                p_at_2 = state.Pressure[helper.P2]
-
-                satnum = helper.satnum
-                satnum::Vector{Int}
-                mobA, immA, dissA, sealA = co2_measures(state, helper.A, satnum)
-                mobB, immB, dissB, sealB = co2_measures(state, helper.B, satnum)
-
-                sealTot = sealing_co2(state, helper.sealing)
-                boundTot = sealing_co2(state, helper.boundary)
-                f = open(file_pth, "a")
-                println(f, "$(fmt(time-time_offset)), $(fmt(p_at_1)), $(fmt(p_at_2)), $(fmt(mobA)), $(fmt(immA)), $(fmt(dissA)), $(fmt(sealA)), $(fmt(mobB)), $(fmt(immB)), $(fmt(dissB)), $(fmt(sealB)), NaN, $(fmt(sealTot)), $(fmt(boundTot))")
-                close(f)
+                write_reporting_line!(handler.helper, state, handler.time, time_offset)
             end
         end
         return (done, report)
     end
     return (hook, file_pth, f)
+end
+
+function write_reporting_line!(helper::CSP11ReportHelper, state, time, time_offset)
+    # fmt = x -> round(x, sigdigits = 16)
+    fmt = x -> x
+
+    p_at_1 = state.Pressure[helper.P1]
+    p_at_2 = state.Pressure[helper.P2]
+
+    satnum = helper.satnum
+    satnum::Vector{Int}
+    mobA, immA, dissA, sealA = co2_measures(state, helper.A, satnum)
+    mobB, immB, dissB, sealB = co2_measures(state, helper.B, satnum)
+
+    sealTot = sealing_co2(state, helper.sealing)
+    boundTot = sealing_co2(state, helper.boundary)
+    f = open(helper.output_path, "a")
+    println(f, "$(fmt(time-time_offset)), $(fmt(p_at_1)), $(fmt(p_at_2)), $(fmt(mobA)), $(fmt(immA)), $(fmt(dissA)), $(fmt(sealA)), $(fmt(mobB)), $(fmt(immB)), $(fmt(dissB)), $(fmt(sealB)), NaN, $(fmt(sealTot)), $(fmt(boundTot))")
+    close(f)
 end
 
 function find_closest_point(pts, ref_pt)

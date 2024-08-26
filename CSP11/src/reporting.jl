@@ -1,19 +1,25 @@
 struct CSP11ReportHelper{T}
     output_path::String
-    P1::Int
-    P2::Int
+    P1::Union{Int, Nothing}
+    P2::Union{Int, Nothing}
     A::Vector{T}
     B::Vector{T}
     C::Vector{T}
     sealing::Vector{Int}
     boundary::Vector{Int}
+    satnum::Vector{Int}
 end
 
-function CSP11ReportHelper(p1, p2, A, B, C, sealing, boundary; path)
+function CSP11ReportHelper(p1, p2, A, B, C, sealing, boundary, satnum; path)
     A = reformat_weights(A)
     B = reformat_weights(B)
     C = reformat_weights(C)
-    return CSP11ReportHelper(path, p1, p2, A, B, C, sealing, boundary)
+    return CSP11ReportHelper(path, p1, p2, A, B, C, sealing, boundary, satnum)
+end
+
+mutable struct CSP11ReportHandler
+    helper::Union{CSP11ReportHelper{Float64}, Nothing}
+    time::Float64
 end
 
 function reformat_weights(weights::Vector{Tuple{Int, T}}) where T<:Real
@@ -30,8 +36,7 @@ function reformat_weights(weights::AbstractVecOrMat{Float64})
     return out
 end
 
-function get_reporting_hook(pth, domain; specase = :b)
-
+function CSP11ReportHelper(domain; path, specase)
     A = domain[:A]
     B = domain[:B]
     C = domain[:C]
@@ -58,9 +63,12 @@ function get_reporting_hook(pth, domain; specase = :b)
 
     satnum = domain[:satnum]
     seal = findall(isequal(1), satnum)
-    helper = CSP11ReportHelper(p1, p2, A, B, C, seal, boundary, path = pth)
+    return CSP11ReportHelper(p1, p2, A, B, C, seal, boundary, satnum, path = path)
+end
 
-    time = 0.0
+function get_reporting_hook(pth, domain; specase = :b)
+    helper = CSP11ReportHelper(domain, path = pth, specase = :b)
+    # Create file
     file_pth = joinpath(pth, "spe11$(specase)_time_series.csv")
     f = open(file_pth, "w")
     println(f, "# t [s], p1 [Pa], p2 [Pa], mobA [kg], immA [kg], dissA [kg], sealA [kg], mobB [kg], immB [kg], dissB [kg], sealB [kg], M_C [m], sealTot [kg], boundTot [kg]")
@@ -73,14 +81,17 @@ function get_reporting_hook(pth, domain; specase = :b)
     # fmt = x -> round(x, sigdigits = 16)
     fmt = x -> x
     time_offset = 1000.0*spe11_year
+    time = 0.0
     function hook(done, report, sim, dt, forces, max_iter, cfg)
         if report[:success]
             time += report[:dt]
             if time - time_offset >= 0.0
                 state = sim.storage.state0.Reservoir
-                p_at_1 = state.Pressure[p1]
-                p_at_2 = state.Pressure[p2]
+                p_at_1 = state.Pressure[helper.P1]
+                p_at_2 = state.Pressure[helper.P2]
 
+                satnum = helper.satnum
+                satnum::Vector{Int}
                 mobA, immA, dissA, sealA = co2_measures(state, helper.A, satnum)
                 mobB, immB, dissB, sealB = co2_measures(state, helper.B, satnum)
 

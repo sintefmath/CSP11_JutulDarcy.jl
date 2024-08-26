@@ -3,7 +3,7 @@ using Jutul
 
 specase1 = :b
 name1 = "horizon-cut_100x50_thermal_cv_tpfa"
-name2 = "cPEBI_819x117_thermal_cv_tpfa_test"
+name2 = "horizon-cut_100x50_thermal_cv_avgmpfa"
 
 # specase = :c
 # name1 = "horz_ndg_cut_PG_50x50x50_thermal_cv"
@@ -64,10 +64,10 @@ end
 
 
 tab = read_file(joinpath(output_folder, file_name))
-tab_name = "C-F"
+tab_name = "TPFA"
 
 tab2 = read_file(joinpath(output_folder2, file_name))
-tab2_name = "cPEBI-F"
+tab2_name = "AvgMPFA"
 ##
 # using CairoMakie
 using GLMakie
@@ -151,25 +151,25 @@ fig = Figure(size = (1200, 800))
 
 ax = Axis(fig[1, 1], title = "CO₂ in region A", xlabel = "Time / year", ylabel = "Mass / kg")
 plot_co2!(ax, tab, :A, name = tab_name)
-# plot_co2!(ax, tab2, :A, name = tab2_name, use_scatter = true)
+plot_co2!(ax, tab2, :A, name = tab2_name, use_scatter = true)
 
 axislegend(position = :rc)
 
 ax = Axis(fig[1, 2], title = "CO₂ in region B", xlabel = "Time / year", ylabel = "Mass / kg")
 plot_co2!(ax, tab, :B, name = tab_name)
-# plot_co2!(ax, tab2, :B, name = tab2_name, use_scatter = true)
+plot_co2!(ax, tab2, :B, name = tab2_name, use_scatter = true)
 
 axislegend(position = :rc)
 
 ax = Axis(fig[2, 1], title = "Pressure at observation points", xlabel = "Time / year", ylabel = "Pressure / MPa")
 plot_pressure!(ax, tab, name = tab_name)
-# plot_pressure!(ax, tab2, name = tab2_name, use_scatter = true)
+plot_pressure!(ax, tab2, name = tab2_name, use_scatter = true)
 
 axislegend(position = :rc)
 
 ax = Axis(fig[2, 2], title = "CO₂ in sealing/bound", xlabel = "Time / year", ylabel = "Mass / kg")
 plot_other!(ax, tab, name = tab_name)
-# plot_other!(ax, tab2, name = tab2_name, use_scatter = true)
+plot_other!(ax, tab2, name = tab2_name, use_scatter = true)
 
 axislegend(position = :lt)
 

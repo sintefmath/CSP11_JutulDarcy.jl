@@ -170,6 +170,8 @@ function reservoir_domain_and_wells_csp11(pth::AbstractString, case = :b; kwarg.
         I1 = setup_well(domain, [wc2], simple_well = simple_well, name = :INJ1)
         wells = [I0, I1]
         domain[:well_cells, nothing] = [wc1, wc2]
+        pop_1_coords = [4500, 1, 1200-500]
+        pop_2_coords = [5100, 1, 1200-1100]
     elseif case == :c
         w = raw_G["cells"]["wellCells"]
         wc1, wc2 = Int.(vec(w[1])), Int.(vec(w[2]))
@@ -189,7 +191,9 @@ function reservoir_domain_and_wells_csp11(pth::AbstractString, case = :b; kwarg.
         domain[:num_well_cells, nothing] = [length(wc1), length(wc2)]
         rates_well_1 = vec(raw_G["cells"]["wellMassRate"][1])
         rates_well_2 = vec(raw_G["cells"]["wellMassRate"][2])
-        domain[:well_rates, nothing] = [rates_well_1;rates_well_2].*si_unit(:kilogram)./si_unit(:second)
+        domain[:well_rates, nothing] = [rates_well_1; rates_well_2].*si_unit(:kilogram)./si_unit(:second)
+        pop_1_coords = [4500, 2500, 1200-655]
+        pop_2_coords = [5100, 02500, 1200-1255]
     end
 
     A = raw_G["cells"]["fractionInA"]
@@ -207,6 +211,17 @@ function reservoir_domain_and_wells_csp11(pth::AbstractString, case = :b; kwarg.
     end
     domain[:is_boundary, Cells()] = is_boundary
     domain[:boundary, nothing] = boundary
+
+    # Obervation points
+    pts = domain[:cell_centroids]
+    pts = vec(reinterpret(Jutul.StaticArrays.SVector{3, Float64}, pts))
+    p1 = find_closest_point(pts, pop_1_coords)
+    p2 = find_closest_point(pts, pop_2_coords)
+
+    observation_points = zeros(Int, nc)
+    observation_points[p1] = 1
+    observation_points[p2] = 2
+    domain[:observation_points, Cells()] = observation_points
 
     # domain[:well_cells, nothing] = [wc1, wc2]
     return domain, wells, matdata

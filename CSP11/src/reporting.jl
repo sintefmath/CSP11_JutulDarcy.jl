@@ -42,24 +42,9 @@ function CSP11ReportHelper(domain; path, specase)
     C = domain[:C]
 
     boundary = domain[:boundary]
-    if specase == :b
-        pop_1_coords = [4500, 1, 1200-500]
-        pop_2_coords = [5100, 1, 1200-1100]
-        # POP 1: (4500, 500)
-        # POP 2: (5100, 1100)
-    elseif specase == :c
-        pop_1_coords = [4500, 2500, 1200-655]
-        pop_2_coords = [5100, 02500, 1200-1255]
-    else
-        @error "Only case b and c supported."
-    end
-    # TODO: Put POPs into data_domain
-
-    # pts = domain.representation.node_points
-    pts = domain[:cell_centroids]
-    pts = vec(reinterpret(Jutul.StaticArrays.SVector{3, Float64}, pts))
-    p1 = find_closest_point(pts, pop_1_coords)
-    p2 = find_closest_point(pts, pop_2_coords)
+    obs_pts = domain[:observation_points]
+    p1 = findfirst(isequal(1), obs_pts)
+    p2 = findfirst(isequal(2), obs_pts)
 
     satnum = domain[:satnum]
     seal = findall(isequal(1), satnum)

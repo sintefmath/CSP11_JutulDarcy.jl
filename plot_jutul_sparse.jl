@@ -2,8 +2,8 @@ using CSV, DataFrames
 using Jutul
 
 specase1 = :b
-name1 = "struct819x117_thermal_cv"
-name2 = "cPEBI_819x117_thermal_cv"
+name1 = "horizon-cut_100x50_thermal_cv_tpfa"
+name2 = "cPEBI_819x117_thermal_cv_tpfa_test"
 
 # specase = :c
 # name1 = "horz_ndg_cut_PG_50x50x50_thermal_cv"
@@ -87,16 +87,18 @@ function plot_co2!(ax, tab, reg = :A; use_scatter = false, name = "", kwarg...)
     end
     if use_scatter
         f! = scatter!
+        ARG = SCATTER_ARG
     else
         f! = lines!
+        ARG = NamedTuple()
     end
     t = tab.t
     X = tab[reg]
-    f!(ax, t, X.mob, label = genlabel("mobile"); SCATTER_ARG...)
-    f!(ax, t, X.imm, label = genlabel("immobile"); SCATTER_ARG...)
-    f!(ax, t, X.diss, label = genlabel("dissolved"); SCATTER_ARG...)
-    f!(ax, t, X.seal, label = genlabel("in sealing"); SCATTER_ARG...)
-    f!(ax, t, X.mob + X.imm + X.diss, label = genlabel("total"); SCATTER_ARG...)
+    f!(ax, t, X.mob, label = genlabel("mobile"); ARG...)
+    f!(ax, t, X.imm, label = genlabel("immobile"); ARG...)
+    f!(ax, t, X.diss, label = genlabel("dissolved"); ARG...)
+    f!(ax, t, X.seal, label = genlabel("in sealing"); ARG...)
+    f!(ax, t, X.mob + X.imm + X.diss, label = genlabel("total"); ARG...)
 end
 
 function plot_pressure!(ax, tab; use_scatter = false, name = "", kwarg...)
@@ -105,8 +107,10 @@ function plot_pressure!(ax, tab; use_scatter = false, name = "", kwarg...)
     end
     if use_scatter
         f! = scatter!
+        ARG = SCATTER_ARG
     else
         f! = lines!
+        ARG = NamedTuple()
     end
     function genlabel(x)
         if name == ""
@@ -116,8 +120,8 @@ function plot_pressure!(ax, tab; use_scatter = false, name = "", kwarg...)
         end
     end
     t = tab.t
-    f!(t, tab.p1/1e6, label = genlabel("P1"); SCATTER_ARG...)
-    f!(t, tab.p2/1e6, label = genlabel("P2"); SCATTER_ARG...)
+    f!(t, tab.p1/1e6, label = genlabel("P1"); ARG...)
+    f!(t, tab.p2/1e6, label = genlabel("P2"); ARG...)
 end
 
 function plot_other!(ax, tab; use_scatter = false, name = "", kwarg...)
@@ -126,8 +130,10 @@ function plot_other!(ax, tab; use_scatter = false, name = "", kwarg...)
     end
     if use_scatter
         f! = scatter!
+        ARG = SCATTER_ARG
     else
         f! = lines!
+        ARG = NamedTuple()
     end
     function genlabel(x)
         if name == ""
@@ -137,33 +143,33 @@ function plot_other!(ax, tab; use_scatter = false, name = "", kwarg...)
         end
     end
     t = tab.t
-    f!(t, tab.sealTot, label = genlabel("seal"); SCATTER_ARG...)
-    f!(t, tab.boundTot, label = genlabel("bound"); SCATTER_ARG...)
+    f!(t, tab.sealTot, label = genlabel("seal"); ARG...)
+    f!(t, tab.boundTot, label = genlabel("bound"); ARG...)
 end
 
 fig = Figure(size = (1200, 800))
 
 ax = Axis(fig[1, 1], title = "CO₂ in region A", xlabel = "Time / year", ylabel = "Mass / kg")
 plot_co2!(ax, tab, :A, name = tab_name)
-plot_co2!(ax, tab2, :A, name = tab2_name, use_scatter = true)
+# plot_co2!(ax, tab2, :A, name = tab2_name, use_scatter = true)
 
 axislegend(position = :rc)
 
 ax = Axis(fig[1, 2], title = "CO₂ in region B", xlabel = "Time / year", ylabel = "Mass / kg")
 plot_co2!(ax, tab, :B, name = tab_name)
-plot_co2!(ax, tab2, :B, name = tab2_name, use_scatter = true)
+# plot_co2!(ax, tab2, :B, name = tab2_name, use_scatter = true)
 
 axislegend(position = :rc)
 
 ax = Axis(fig[2, 1], title = "Pressure at observation points", xlabel = "Time / year", ylabel = "Pressure / MPa")
 plot_pressure!(ax, tab, name = tab_name)
-plot_pressure!(ax, tab2, name = tab2_name, use_scatter = true)
+# plot_pressure!(ax, tab2, name = tab2_name, use_scatter = true)
 
 axislegend(position = :rc)
 
 ax = Axis(fig[2, 2], title = "CO₂ in sealing/bound", xlabel = "Time / year", ylabel = "Mass / kg")
 plot_other!(ax, tab, name = tab_name)
-plot_other!(ax, tab2, name = tab2_name, use_scatter = true)
+# plot_other!(ax, tab2, name = tab2_name, use_scatter = true)
 
 axislegend(position = :lt)
 

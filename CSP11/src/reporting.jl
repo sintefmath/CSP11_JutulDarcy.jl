@@ -59,7 +59,7 @@ function CSP11ReportHelper(domain; path, specase)
     pts = domain[:cell_centroids]
     pts = vec(reinterpret(Jutul.StaticArrays.SVector{3, Float64}, pts))
     p1 = find_closest_point(pts, pop_1_coords)
-    p2 = find_closest_point(pts, pop_1_coords)
+    p2 = find_closest_point(pts, pop_2_coords)
 
     satnum = domain[:satnum]
     seal = findall(isequal(1), satnum)

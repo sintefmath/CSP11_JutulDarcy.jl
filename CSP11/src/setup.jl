@@ -306,11 +306,9 @@ function setup_reservoir_model_csp11(reservoir::DataDomain; include_satfun = tru
             push!(pc.regions, c)
         end
 
-        if reservoir_model(model).system isa CompositeSystem
-            kr = Pair(:flow, kr)
-            pc = Pair(:flow, pc)
+        for cap in pc.pc[1]
+            @. cap.F = abs(cap.F)
         end
-
         set_secondary_variables!(model[:Reservoir],
             RelativePermeabilities = kr,
             CapillaryPressure = pc

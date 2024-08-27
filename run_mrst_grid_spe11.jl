@@ -6,7 +6,7 @@ basename = "horizon-cut_100x50"; specase = :b
 
 basename = "test_cart_100_50"; specase = :b
 # basename = "cart_a_30_20"
-# basename = "struct20x20x20"; specase = :c
+basename = "struct20x20x20"; specase = :c
 
 # basename = "cart_a_30_20"; specase = :a
 
@@ -65,13 +65,15 @@ if plot_facies
 end
 fig
 ##
-states_ref = CSP11.map_to_reporting_grid(case, states);
-##
-if specase == :b
-    x = states_ref[end][:sg]
-    x = states_ref[end][:co2_mass]
-    x = reshape(x, 840, 120)
-    heatmap(x)
+if false
+    states_ref = CSP11.map_to_reporting_grid(case, states);
+    ##
+    if specase == :b
+        x = states_ref[end][:sg]
+        x = states_ref[end][:co2_mass]
+        x = reshape(x, 840, 120)
+        heatmap(x)
+    end
 end
 ##
 pth = joinpath(@__DIR__, "data", "compare", "generated")

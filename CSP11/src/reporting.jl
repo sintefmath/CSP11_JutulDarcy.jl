@@ -253,14 +253,14 @@ function map_to_reporting_grid(case, states::AbstractVector)
         total_weights[j] += w_i
     end
 
-    return map(x -> map_to_reporting_grid(x, weights, total_weights, dims), states[2:end])
+    return map(x -> map_to_reporting_grid(x, weights, total_weights, dims), states)
 end
 
 function write_reporting_grid(case, states, pth, specase::Symbol)
     @assert specase in (:a, :b)
     @assert isdir(pth)
     states = map_to_reporting_grid(case, states)
-    @assert length(states) == 200
+    @assert length(states) == 201
     # Case B is [840, 120]
     # Case C is [168, 100, 120]
 

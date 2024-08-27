@@ -84,7 +84,7 @@ function get_reporting_hook(pth, domain; specase = :b)
     return (hook, file_pth, f)
 end
 
-function write_reporting_line!(helper::CSP11ReportHelper, state, time, time_offset)
+function write_reporting_line!(helper::CSP11ReportHelper, state, time, time_offset = 1000.0*spe11_year)
     # fmt = x -> round(x, sigdigits = 16)
     fmt = x -> x
 

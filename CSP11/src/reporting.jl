@@ -265,16 +265,14 @@ function write_reporting_grid(case, states, pth, specase::Symbol)
     # Case C is [168, 100, 120]
 
     if specase == :b
-        header = "# x [m], z [m], pressure [Pa], gas saturation [-], mass fraction of CO2 in liquid [-], mass fraction of H20 in vapor [-], phase mass density gas [kg/m3], phase mass density water [kg/m3], total mass CO2 [kg], temperature [C]"
         pdims = [8400.0, 1.0, 1200.0]
         nx = 840
-        nz = 120
         ny = 1
+        nz = 120
         # 8400 x 1200 m
         is_3d = false
     else
         # x, y, z
-        header = "# x [m], y [m], z [m], pressure [Pa], gas saturation [-], mass fraction of CO2 in liquid [-], mass fraction of H20 in vapor [-], phase mass density gas [kg/m3], phase mass density water [kg/m3], total mass CO2 [kg], temperature [C]"
         pdims = [8400.0, 5000.0, 1200.]
         # 8400 x 5000 x 1200 m
         nx, ny, nz = 168, 100, 120
@@ -299,31 +297,44 @@ function write_reporting_grid(case, states, pth, specase::Symbol)
         co2_mass = get_data(:co2_mass)
 
         nyr = 5*(tno-1)
-        file_pth = joinpath(pth, "spe11$(specase)_performance_spatial_map_$(nyr)y.csv")
-        @info "Writing to $file_pth"
-        f = open(file_pth, "w")
-        println(f, header)
-        for i in 1:nx
-            x = (i-0.5)*dx
-            for j in 1:ny
+        file_pth = joinpath(pth, "spe11$(specase)_spatial_map_$(nyr)y.csv")
+        @info "Writing step $tno to $file_pth"
+        @time write_timestep_dense(file_pth, nx, ny, nz, dx, dy, dz, p, sg, x_co2, y_h2o, rho_g, rho_w, co2_mass, T, is_3d)
+    end
+end
+
+function write_timestep_dense(file_pth, nx, ny, nz, dx, dy, dz, p, sg, x_co2, y_h2o, rho_g, rho_w, co2_mass, T, is_3d)
+    f = open(file_pth, "w")
+    if is_3d
+        header = "# x [m], y [m], z [m], pressure [Pa], gas saturation [-], mass fraction of CO2 in liquid [-], mass fraction of H20 in vapor [-], phase mass density gas [kg/m3], phase mass density water [kg/m3], total mass CO2 [kg], temperature [C]"
+    else
+        header = "# x [m], z [m], pressure [Pa], gas saturation [-], mass fraction of CO2 in liquid [-], mass fraction of H20 in vapor [-], phase mass density gas [kg/m3], phase mass density water [kg/m3], total mass CO2 [kg], temperature [C]"
+    end
+    println(f, header)
+    for k in 1:nz
+        for j in 1:ny
+            for i in 1:nx
+                x = (i-0.5)*dx
                 y = (j-0.5)*dy
-                for k in 1:nz
-                    z = (k-0.5)*dz
-                    write_dense_line!(
-                        f, x, y, z, p,
-                        sg[i, j, k], x_co2[i, j, k],
-                        y_h2o[i, j, k],
-                        rho_g[i, j, k],
-                        rho_w[i, j, k],
-                        co2_mass[i, j, k],
-                        T[i, j, k],
-                        is_3d
-                    )
+                z = (k-0.5)*dz
+                # println("$tno: $i $j $k ($nx $ny $nz)")
+                if true
+                write_dense_line!(
+                    f, x, y, z,
+                    p[i, j, k],
+                    sg[i, j, k], x_co2[i, j, k],
+                    y_h2o[i, j, k],
+                    rho_g[i, j, k],
+                    rho_w[i, j, k],
+                    co2_mass[i, j, k],
+                    T[i, j, k],
+                    is_3d
+                )
                 end
             end
         end
-        close(f)
     end
+    close(f)
 end
 
 function write_dense_line!(f, x, y, z, p, sg, x_co2, y_h2o, rhog, rhow, mass_co2, T, is_3d)
@@ -335,10 +346,10 @@ function write_dense_line!(f, x, y, z, p, sg, x_co2, y_h2o, rhog, rhow, mass_co2
         end
     end
     print_entry(x)
-    print_entry(y)
     if is_3d
-        print_entry(z)
+        print_entry(y)
     end
+    print_entry(z)
     print_entry(p)
     print_entry(sg)
     print_entry(x_co2)

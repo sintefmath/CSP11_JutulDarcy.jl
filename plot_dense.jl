@@ -3,8 +3,12 @@ using CSV, DataFrames, GLMakie
 specase = :b
 pth = joinpath(@__DIR__, "data/compare/b/spe11b_spatial_map_1000y.csv")
 
-specase = :c
-pth = joinpath(@__DIR__, "data/compare/c/spe11c_spatial_map_1000y.csv")
+# specase = :b
+# pth = joinpath(@__DIR__, "data/compare/generated/spe11b_spatial_map_995y.csv")
+
+
+# specase = :c
+# pth = joinpath(@__DIR__, "data/compare/c/spe11c_spatial_map_1000y.csv")
 
 
 if specase == :b

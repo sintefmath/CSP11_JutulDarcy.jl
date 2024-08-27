@@ -307,7 +307,7 @@ function setup_reservoir_model_csp11(reservoir::DataDomain; include_satfun = tru
         end
 
         for cap in pc.pc[1]
-            @. cap.F = abs(cap.F)
+            # @. cap.F = abs(cap.F)
         end
         set_secondary_variables!(model[:Reservoir],
             RelativePermeabilities = kr,

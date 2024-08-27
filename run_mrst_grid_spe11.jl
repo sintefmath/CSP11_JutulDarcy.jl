@@ -65,4 +65,17 @@ if plot_facies
 end
 fig
 ##
-CSP11.map_to_reporting_grid(case, states)
+states_ref = CSP11.map_to_reporting_grid(case, states);
+##
+if specase == :b
+    x = states_ref[end][:sg]
+    x = states_ref[end][:co2_mass]
+    x = reshape(x, 840, 120)
+    heatmap(x)
+end
+##
+pth = joinpath(@__DIR__, "data", "compare", "generated")
+if !isdir(pth)
+    mkdir(pth)
+end
+CSP11.write_reporting_grid(case, states, pth, specase)

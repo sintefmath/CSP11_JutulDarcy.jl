@@ -168,13 +168,65 @@ function map_to_reporting_grid(state, weights, total_weights, dims)
     # values refer to the lower-left corners of each cell in the uniform report grid.) Moreover, note that
     # intensive variables (pressure, saturation, and mass fractions) should be reported as cell-center values,
     # while extensive variables (total mass) should be reported as integral/average values for the cell
-    is_case_b = length(dims) == 2
+    nx, ny, nz = dims
+    # Case B is [840, 120]
+    # Case C is [168, 100, 120]
+    is_case_b = nx == 840 && ny == 120 && nz == 1
     # total_weights tell us how much weight a cell has been assigned in total
     # relative weight of a total mass for a given cell is w_i / total_weights to
     # give the fraction of the total mass assigned to a cell. Sum it up directly
     # from there.
-    @info "!!" weights
-    error()
+    if is_case_b
+        # x, z
+        nz = ny
+        ny = 1
+        # 8400 x 1200 m
+    else
+        # x, y, z
+        # 8400 x 5000 x 1200 m
+        @assert dims == [168, 100, 120]
+    end
+    
+    n = prod(dims)
+    p = zeros(n)
+    sg = zeros(n)
+    x_co2 = zeros(n)
+    y_h2o = zeros(n)
+    rho_w = zeros(n)
+    rho_g = zeros(n)
+    T = zeros(n)
+    co2_mass = zeros(n)
+
+    P = state[:Pressure]
+    Temperature = state[:Temperature]
+    Sg = state[:Saturations][2, :]
+    X_co2 = state[:LiquidMassFractions][2, :]
+    Y_h2o = state[:VaporMassFractions][1, :]
+    Rho_w = state[:PhaseMassDensities][1, :]
+    Rho_g = state[:PhaseMassDensities][2, :]
+    CO2_mass = state[:TotalMasses][2, :]
+
+    for (i, j, w) in weights
+        p[i] += P[j]*w
+        sg[i] += Sg[j]*w
+        x_co2[i] += X_co2[j]*w
+        y_h2o[i] += Y_h2o[j]*w
+        rho_w[i] += Rho_w[j]*w
+        rho_g[i] += Rho_g[j]*w
+        T[i] += Temperature[j]*w
+
+        co2_mass[i] += CO2_mass[j]*w/total_weights[j]
+    end
+    return Dict(
+        :p => p,
+        :sg => sg,
+        :x_co2 => x_co2,
+        :y_h2o => y_h2o,
+        :rho_w => rho_w,
+        :rho_g => rho_g,
+        :T => T,
+        :co2_mass => co2_mass
+    )
 end
 
 function map_to_reporting_grid(case, states::AbstractVector)
@@ -202,4 +254,98 @@ function map_to_reporting_grid(case, states::AbstractVector)
     end
 
     return map(x -> map_to_reporting_grid(x, weights, total_weights, dims), states[2:end])
+end
+
+function write_reporting_grid(case, states, pth, specase::Symbol)
+    @assert specase in (:a, :b)
+    @assert isdir(pth)
+    states = map_to_reporting_grid(case, states)
+    @assert length(states) == 200
+    # Case B is [840, 120]
+    # Case C is [168, 100, 120]
+
+    if specase == :b
+        header = "# x [m], z [m], pressure [Pa], gas saturation [-], mass fraction of CO2 in liquid [-], mass fraction of H20 in vapor [-], phase mass density gas [kg/m3], phase mass density water [kg/m3], total mass CO2 [kg], temperature [C]"
+        pdims = [8400.0, 1.0, 1200.0]
+        nx = 840
+        nz = 120
+        ny = 1
+        # 8400 x 1200 m
+        is_3d = false
+    else
+        # x, y, z
+        header = "# x [m], y [m], z [m], pressure [Pa], gas saturation [-], mass fraction of CO2 in liquid [-], mass fraction of H20 in vapor [-], phase mass density gas [kg/m3], phase mass density water [kg/m3], total mass CO2 [kg], temperature [C]"
+        pdims = [8400.0, 5000.0, 1200.]
+        # 8400 x 5000 x 1200 m
+        nx, ny, nz = 168, 100, 120
+        is_3d = true
+    end
+    dx = pdims[1]/nx
+    dy = pdims[2]/ny
+    dz = pdims[3]/nz
+
+    @assert length(states[1][:p]) == nx*ny*nz
+    # spe11b_performance_spatial_map_1000y
+
+    for (tno, state) in enumerate(states)
+        get_data(k) = reshape(state[k], nx, ny, nz)
+        p = get_data(:p)
+        sg = get_data(:sg)
+        x_co2 = get_data(:x_co2)
+        y_h2o = get_data(:y_h2o)
+        rho_w = get_data(:rho_w)
+        rho_g = get_data(:rho_g)
+        T = get_data(:T)
+        co2_mass = get_data(:co2_mass)
+
+        nyr = 5*(tno-1)
+        file_pth = joinpath(pth, "spe11$(specase)_performance_spatial_map_$(nyr)y.csv")
+        @info "Writing to $file_pth"
+        f = open(file_pth, "w")
+        println(f, header)
+        for i in 1:nx
+            x = (i-0.5)*dx
+            for j in 1:ny
+                y = (j-0.5)*dy
+                for k in 1:nz
+                    z = (k-0.5)*dz
+                    write_dense_line!(
+                        f, x, y, z, p,
+                        sg[i, j, k], x_co2[i, j, k],
+                        y_h2o[i, j, k],
+                        rho_g[i, j, k],
+                        rho_w[i, j, k],
+                        co2_mass[i, j, k],
+                        T[i, j, k],
+                        is_3d
+                    )
+                end
+            end
+        end
+        close(f)
+    end
+end
+
+function write_dense_line!(f, x, y, z, p, sg, x_co2, y_h2o, rhog, rhow, mass_co2, T, is_3d)
+    # "# x [m], y [m], z [m], pressure [Pa], gas saturation [-], mass fraction of CO2 in liquid [-], mass fraction of H20 in vapor [-], phase mass density gas [kg/m3], phase mass density water [kg/m3], total mass CO2 [kg], temperature [C]"
+    function print_entry(x, is_last = false)
+        print(f, "$x")
+        if !is_last
+            print(f, ", ")
+        end
+    end
+    print_entry(x)
+    print_entry(y)
+    if is_3d
+        print_entry(z)
+    end
+    print_entry(p)
+    print_entry(sg)
+    print_entry(x_co2)
+    print_entry(y_h2o)
+    print_entry(rhog)
+    print_entry(rhow)
+    print_entry(mass_co2)
+    print_entry(T)
+    print(f, "\n")
 end

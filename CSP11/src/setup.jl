@@ -62,10 +62,6 @@ function setup_spe11_case_from_mrst_grid(basename;
         forces, dt = CSP11.setup_reservoir_forces_and_timesteps_csp11(model,
             case,
             nstep_initialization = nstep_initialization,
-            # nstep_migration = 0,
-            # nstep_injection1 = 0,
-            # nstep_injection2 = 0,
-            # time_injection1 = 365*si_unit(:day),
             nstep_injection1 = nstep_injection1,
             nstep_injection2 = nstep_injection2,
             nstep_migration = nstep_migration,
@@ -84,15 +80,12 @@ function setup_spe11_case_from_mrst_grid(basename;
             case,
             well_labels = well_labels,
             nstep_initialization = nstep_initialization,
-            # nstep_migration = 0,
-            # nstep_injection1 = 0,
-            # nstep_injection2 = 0,
-            # time_injection1 = 365*si_unit(:day),
             nstep_injection1 = nstep_injection1,
             nstep_injection2 = nstep_injection2,
             nstep_migration = nstep_migration,
             rate_injection1 = rate_injection1,
-            rate_injection2 = rate_injection2
+            rate_injection2 = rate_injection2,
+            use_reporting_steps = use_reporting_steps
         );
     end
 

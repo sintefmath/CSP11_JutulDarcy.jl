@@ -257,7 +257,7 @@ function map_to_reporting_grid(case, states::AbstractVector)
 end
 
 function write_reporting_grid(case, states, pth, specase::Symbol)
-    @assert specase in (:a, :b)
+    @assert specase in (:c, :b)
     @assert isdir(pth)
     states = map_to_reporting_grid(case, states)
     @assert length(states) == 201

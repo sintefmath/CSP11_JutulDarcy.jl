@@ -184,9 +184,11 @@ function map_to_reporting_grid(state, weights, total_weights, dims)
     else
         # x, y, z
         # 8400 x 5000 x 1200 m
-        @assert dims == [168, 100, 120]
+        @assert dims[1] == 168
+        @assert dims[2] == 100
+        @assert dims[3] == 120
     end
-    
+
     n = prod(dims)
     p = zeros(n)
     sg = zeros(n)
@@ -246,7 +248,7 @@ function map_to_reporting_grid(case, states::AbstractVector)
     dims = Int.(rg["dims"])
     weights = [(I[i], J[i], w[i]) for i in eachindex(w, I, J)]
     @assert maximum(I) == prod(dims)
-    @assert maximum(J) == nc
+    @assert maximum(J) <= nc
 
     total_weights = zeros(nc)
     for (j, w_i) in zip(J, w)
@@ -359,4 +361,55 @@ function write_dense_line!(f, x, y, z, p, sg, x_co2, y_h2o, rhog, rhow, mass_co2
     print_entry(mass_co2)
     print_entry(T)
     print(f, "\n")
+end
+
+function print_performance(pth, states, reports, specase::Symbol)
+    io = open(joinpath(pth, "spe11$(specase)_performance_time_series_detailed.csv"))
+    dt = report_timesteps(reports)
+    current_time = 0.0
+    total_cputime = 0.0
+    println(io, "# t[s], avg timestep [s], failed timesteps, mass of co2, dof, nliter, nres, liniter, runtime [s], tlinsol [s]")
+    tot_co2 = Float64[]
+    for (i, rep) in enumerate(reports)
+        current_time += dt[i]
+        total_cputime += rep[:total_time]
+    
+        dt_avg = 0
+        nsteps = 0
+    
+        nfailed_steps = 0
+        mass_co2 = sum(states[i][:TotalMasses][2, :])
+        newtons = 0
+        nresiduals = 0
+        liniter = 0
+        tlinsol = 0.0
+        
+        for minirep in rep[:ministeps]
+            ok = minirep[:success]
+            st = minirep[:stats]
+            newtons += st.newtons
+            nresiduals += st.linearizations
+            liniter += st.linear_iterations
+            tlinsol += st.linear_setup + st.linear_solve
+            nfailed_steps += !ok
+    
+            if ok
+                dt_avg += minirep[:dt]
+                nsteps += 1
+            end
+        end
+        push!(tot_co2, mass_co2)
+        dt_avg = dt_avg/nsteps
+        println(io, "$current_time, $dt_avg, $nfailed_steps, $mass_co2, 3, $newtons, $nresiduals, $liniter, $total_cputime, $tlinsol")
+        # t [s]
+        # avg timestep [s]
+        # failed timesteps 
+        # mass of co2
+        # dof
+        # nliter
+        # nres
+        # liniter
+        # runtime [s]
+        # tlinsol [s]
+    end
 end

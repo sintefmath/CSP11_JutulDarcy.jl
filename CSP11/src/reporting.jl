@@ -207,7 +207,21 @@ function map_to_reporting_grid(state, weights, total_weights, dims)
     Rho_w = state[:PhaseMassDensities][1, :]
     Rho_g = state[:PhaseMassDensities][2, :]
     CO2_mass = state[:TotalMasses][2, :]
+    weighted_remapping!(p, P, sg, Sg, x_co2, X_co2, y_h2o, Y_h2o, rho_w, Rho_w, rho_g, Rho_g, T, Temperature, co2_mass, CO2_mass, weights, total_weights)
 
+    return Dict(
+        :p => p,
+        :sg => sg,
+        :x_co2 => x_co2,
+        :y_h2o => y_h2o,
+        :rho_w => rho_w,
+        :rho_g => rho_g,
+        :T => T,
+        :co2_mass => co2_mass
+    )
+end
+
+function weighted_remapping!(p, P, sg, Sg, x_co2, X_co2, y_h2o, Y_h2o, rho_w, Rho_w, rho_g, Rho_g, T, Temperature, co2_mass, CO2_mass, weights, total_weights)
     for (i, j, w) in weights
         p[i] += P[j]*w
         sg[i] += Sg[j]*w
@@ -219,16 +233,6 @@ function map_to_reporting_grid(state, weights, total_weights, dims)
 
         co2_mass[i] += CO2_mass[j]*w/total_weights[j]
     end
-    return Dict(
-        :p => p,
-        :sg => sg,
-        :x_co2 => x_co2,
-        :y_h2o => y_h2o,
-        :rho_w => rho_w,
-        :rho_g => rho_g,
-        :T => T,
-        :co2_mass => co2_mass
-    )
 end
 
 function map_to_reporting_grid(case, states::AbstractVector)
@@ -255,7 +259,12 @@ function map_to_reporting_grid(case, states::AbstractVector)
         total_weights[j] += w_i
     end
 
-    return map(x -> map_to_reporting_grid(x, weights, total_weights, dims), states)
+    mapped_states = Dict[]
+    Jutul.ProgressMeter.@showprogress for state in states
+        s = map_to_reporting_grid(state, weights, total_weights, dims)
+        push!(mapped_states, s)
+    end
+    return mapped_states
 end
 
 function write_reporting_grid(case, states, pth, specase::Symbol)

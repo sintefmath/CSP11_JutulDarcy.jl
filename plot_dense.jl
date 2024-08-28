@@ -1,10 +1,12 @@
 using CSV, DataFrames, GLMakie
 
+
+
 specase = :b
 pth = joinpath(@__DIR__, "data/compare/b/spe11b_spatial_map_1000y.csv")
 
 # specase = :b
-# pth = joinpath(@__DIR__, "data/compare/generated/spe11b_spatial_map_995y.csv")
+# pth = joinpath(@__DIR__, "data/compare/generated/spe11b_spatial_map_1000y.csv")
 
 
 # specase = :c
@@ -19,11 +21,16 @@ else
 end
 df = CSV.read(pth, DataFrame)
 ##
-rhow = df[:, " phase mass density water [kg/m3]"]
-rhow = reshape(rhow, dims...)
+f = " total mass CO2 [kg]"
+# f = 
+val = df[:, f]
+val = reshape(val, dims...)
+@info "Sum" sum(val)
 
 if specase == :b
-    heatmap(rhow)
+    fig, ax, plt = heatmap(val)
 else
-    volume(rhow)
+    fig, ax, plt = volume(val)
 end
+Colorbar(fig[1, 2], plt)
+fig

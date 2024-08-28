@@ -5,8 +5,13 @@ using Jutul, JutulDarcy, HYPRE, CSP11, GLMakie
 basename = "horizon-cut_100x50"; specase = :b
 
 basename = "test_cart_100_50"; specase = :b
+
+
+# basename = "test_cart_100_50_50"; specase = :c
 # basename = "cart_a_30_20"
 basename = "struct20x20x20"; specase = :c
+
+basename = "c_10x10x10"; specase = :c
 
 # basename = "cart_a_30_20"; specase = :a
 
@@ -77,7 +82,5 @@ if false
 end
 ##
 pth = joinpath(@__DIR__, "data", "compare", "generated")
-if !isdir(pth)
-    mkdir(pth)
-end
+mkpath(pth)
 CSP11.write_reporting_grid(case, states, pth, specase)

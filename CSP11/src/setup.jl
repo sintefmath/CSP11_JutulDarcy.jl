@@ -9,8 +9,7 @@ function setup_spe11_case_from_mrst_grid(basename;
         nstep_injection1 = 50,
         nstep_injection2 = 50,
         nstep_migration = 100,
-        use_reporting_steps = false,
-        composite = false,
+        use_reporting_steps = true,
         kgrad = :tpfa,
         kwarg...
     )
@@ -18,7 +17,6 @@ function setup_spe11_case_from_mrst_grid(basename;
 
     pth = joinpath(dirname, "$basename.mat")
     domain, wells, matfile = reservoir_domain_and_wells_csp11(pth, case);
-    composite = composite || thermal
 
     # return domain, wells
     if thermal
@@ -34,7 +32,6 @@ function setup_spe11_case_from_mrst_grid(basename;
         backend = :csr,
         general_ad = false,
         dT_max_abs = 30.0,
-        composite = composite,
         split_wells = true,
         kgrad = kgrad,
         kwarg...
@@ -111,23 +108,34 @@ function reservoir_domain_and_wells_csp11(pth::AbstractString, case = :b; kwarg.
     G = UnstructuredMesh(MRSTWrapMesh(raw_G), z_is_depth = true)
     satnum = Int.(vec(raw_G["cells"]["tag"]))
     # TODO: Special perm transform for case C
-    K, poro = rock_props_from_satnum(satnum, case)
-    if !ismissing(raw_rock) && case == :b
-        # TODO: Check C as well.
-        Kr = collect(raw_rock["perm"]')
-        @. Kr = max(Kr, 1e-10*si_unit(:darcy))
-        poro_r = collect(vec(raw_rock["poro"]))
-        poro_r[poro_r .< 0.05] .= 0.05
-        satnum0 = Int.(vec(raw_rock["regions"]["saturation"]))
-        @assert all(satnum0 .== satnum)
+    if false
+        K, poro = rock_props_from_satnum(satnum, case)
+        if !ismissing(raw_rock) && case == :b
+            # TODO: Check C as well.
+            Kr = collect(raw_rock["perm"]')
+            @. Kr = max(Kr, 1e-10*si_unit(:darcy))
+            poro_r = collect(vec(raw_rock["poro"]))
+            poro_r[poro_r .< 0.05] .= 0.05
+            satnum0 = Int.(vec(raw_rock["regions"]["saturation"]))
+            @assert all(satnum0 .== satnum)
 
-        norm(x) = sum(v -> v^2, x)^0.5
-        if norm(Kr-K)/norm(K) > 1e-10
-            @warn "Mismatch between rock in spec and .rock field. Using spec."
+            norm(x) = sum(v -> v^2, x)^0.5
+            if norm(Kr-K)/norm(K) > 1e-10
+                @warn "Mismatch between rock in spec and .rock field. Using spec."
+            end
+            if norm(poro_r-poro)/norm(poro) > 1e-10
+                @warn "Mismatch between poro in spec and .rock field. Using spec."
+            end
         end
-        if norm(poro_r-poro)/norm(poro) > 1e-10
-            @warn "Mismatch between poro in spec and .rock field. Using spec."
+    else
+        @info "Perm from rock"
+        K = collect(raw_rock["perm"]')
+        if case == :c
+            @assert size(K, 1) == 6
         end
+        @. K = max(K, 1e-10*si_unit(:darcy))
+        poro = collect(vec(raw_rock["poro"]))
+        poro[poro .< 0.05] .= 0.05
     end
     domain = reservoir_domain_csp11(G, case; satnum = satnum, permeability = K, porosity = poro, kwarg...)
     volume = domain[:volumes]
@@ -385,6 +393,7 @@ function setup_reservoir_forces_and_timesteps_csp11(model, case = :b;
 
         # First injection period
         ctrl1 = Dict{Symbol, Any}()
+        @info "??" well_labels rate_injection1
         for (i, name) in enumerate(well_labels)
             ctrl1[name] = rate_to_injection_control(rate_injection1[i], rho_co2, injection_temperature, enthalpy = H_well)
         end

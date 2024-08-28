@@ -260,7 +260,7 @@ function map_to_reporting_grid(case, states::AbstractVector)
     end
 
     mapped_states = Dict[]
-    Jutul.ProgressMeter.@showprogress for state in states
+    Jutul.ProgressMeter.@showprogress desc = "Mapping to dense grid." for state in states
         s = map_to_reporting_grid(state, weights, total_weights, dims)
         push!(mapped_states, s)
     end
@@ -296,7 +296,7 @@ function write_reporting_grid(case, states, pth, specase::Symbol)
     @assert length(states[1][:p]) == nx*ny*nz
     # spe11b_performance_spatial_map_1000y
 
-    for (tno, state) in enumerate(states)
+    Jutul.ProgressMeter.@showprogress desc = "Writing dense grid." for (tno, state) in enumerate(states)
         get_data(k) = reshape(state[k], nx, ny, nz)
         p = get_data(:p)
         sg = get_data(:sg)
@@ -309,8 +309,7 @@ function write_reporting_grid(case, states, pth, specase::Symbol)
 
         nyr = 5*(tno-1)
         file_pth = joinpath(pth, "spe11$(specase)_spatial_map_$(nyr)y.csv")
-        @info "Writing step $tno to $file_pth"
-        @time write_timestep_dense(file_pth, nx, ny, nz, dx, dy, dz, p, sg, x_co2, y_h2o, rho_g, rho_w, co2_mass, T, is_3d)
+        write_timestep_dense(file_pth, nx, ny, nz, dx, dy, dz, p, sg, x_co2, y_h2o, rho_g, rho_w, co2_mass, T, is_3d)
     end
 end
 

@@ -46,13 +46,9 @@ sim, config = setup_reservoir_simulator(case,
     info_level = 1
 );
 ##
-restart = false #'true' will continue sim where it left off
 res = simulate_reservoir(case,
     simulator = sim,
     config = config,
-    restart = restart
-    # max_nonlinear_iterations = 2,
-    # max_timestep_cuts = 0
 );
 ws, states = res;
 ##write to mrst format

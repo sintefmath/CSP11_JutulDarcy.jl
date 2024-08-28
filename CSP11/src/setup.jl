@@ -393,7 +393,6 @@ function setup_reservoir_forces_and_timesteps_csp11(model, case = :b;
 
         # First injection period
         ctrl1 = Dict{Symbol, Any}()
-        @info "??" well_labels rate_injection1
         for (i, name) in enumerate(well_labels)
             ctrl1[name] = rate_to_injection_control(rate_injection1[i], rho_co2, injection_temperature, enthalpy = H_well)
         end

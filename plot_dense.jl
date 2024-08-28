@@ -5,8 +5,14 @@ using CSV, DataFrames, GLMakie
 specase = :b
 pth = joinpath(@__DIR__, "data/compare/b/spe11b_spatial_map_1000y.csv")
 
-# specase = :b
-# pth = joinpath(@__DIR__, "data/compare/generated/spe11b_spatial_map_1000y.csv")
+# specase = :c
+# pth = "/media/moyner/Data/jutul_output/csp11_delivery/spe11c_c_10x10x10_thermal_cv_tpfa/dense/spe11b_spatial_map_1000y.csv"
+
+specase = :b
+pth = joinpath(@__DIR__, "data/compare/generated/spe11b_spatial_map_1000y.csv")
+
+# specase = :c
+# pth = joinpath(@__DIR__, "data/compare/generated/spe11c_spatial_map_1000y.csv")
 
 
 # specase = :c
@@ -22,6 +28,9 @@ end
 df = CSV.read(pth, DataFrame)
 ##
 f = " total mass CO2 [kg]"
+
+f = "# x [m]"
+
 # f = 
 val = df[:, f]
 val = reshape(val, dims...)

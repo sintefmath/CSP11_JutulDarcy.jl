@@ -350,8 +350,11 @@ end
 function write_dense_line!(f, x, y, z, p, sg, x_co2, y_h2o, rhog, rhow, mass_co2, T, is_3d)
     # "# x [m], y [m], z [m], pressure [Pa], gas saturation [-], mass fraction of CO2 in liquid [-], mass fraction of H20 in vapor [-], phase mass density gas [kg/m3], phase mass density water [kg/m3], total mass CO2 [kg], temperature [C]"
     function print_entry(x, is_last = false)
-        print(f, "$x")
-        if !is_last
+        printval = Jutul.@sprintf "%1.3e" x
+        print(f, printval)
+        if is_last
+            print(f, "\n")
+        else
             print(f, ", ")
         end
     end
@@ -367,8 +370,7 @@ function write_dense_line!(f, x, y, z, p, sg, x_co2, y_h2o, rhog, rhow, mass_co2
     print_entry(rhog)
     print_entry(rhow)
     print_entry(mass_co2)
-    print_entry(T)
-    print(f, "\n")
+    print_entry(T, true)
 end
 
 function print_performance(pth, states, reports, specase::Symbol)

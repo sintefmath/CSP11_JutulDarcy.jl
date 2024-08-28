@@ -108,25 +108,9 @@ function reservoir_domain_and_wells_csp11(pth::AbstractString, case = :b; kwarg.
     G = UnstructuredMesh(MRSTWrapMesh(raw_G), z_is_depth = true)
     satnum = Int.(vec(raw_G["cells"]["tag"]))
     # TODO: Special perm transform for case C
-    if false
+    if ismissing(raw_rock)
+        @assert case == :b
         K, poro = rock_props_from_satnum(satnum, case)
-        if !ismissing(raw_rock) && case == :b
-            # TODO: Check C as well.
-            Kr = collect(raw_rock["perm"]')
-            @. Kr = max(Kr, 1e-10*si_unit(:darcy))
-            poro_r = collect(vec(raw_rock["poro"]))
-            poro_r[poro_r .< 0.05] .= 0.05
-            satnum0 = Int.(vec(raw_rock["regions"]["saturation"]))
-            @assert all(satnum0 .== satnum)
-
-            norm(x) = sum(v -> v^2, x)^0.5
-            if norm(Kr-K)/norm(K) > 1e-10
-                @warn "Mismatch between rock in spec and .rock field. Using spec."
-            end
-            if norm(poro_r-poro)/norm(poro) > 1e-10
-                @warn "Mismatch between poro in spec and .rock field. Using spec."
-            end
-        end
     else
         @info "Perm from rock"
         K = collect(raw_rock["perm"]')

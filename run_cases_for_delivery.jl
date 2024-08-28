@@ -23,8 +23,11 @@ for cases_to_run in [cases_b, cases_c]
                 use_reporting_steps = true,
                 kgrad = kg
             );
+            domain = reservoir_domain(case.model)
+            nc = number_of_cells(domain)
+            println("Running case $name with $nc cells")
             pth = jutul_output_path(name, subfolder = "csp11_delivery")
-            hook, csv_pth, f = CSP11.get_reporting_hook(pth, domain);
+            hook, csv_pth, f = CSP11.get_reporting_hook(pth, domain)
             simulate_reservoir(case,
                 output_path = pth,
                 max_timestep = 1*si_unit(:year),

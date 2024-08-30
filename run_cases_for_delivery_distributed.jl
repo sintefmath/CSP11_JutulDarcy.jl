@@ -49,6 +49,7 @@ end
         max_timestep = 1*si_unit(:year),
         report_level = 0,
         tol_cnv = 0.01,
+        nonlinear_tolerance = Inf, # Thermal, for AvgMPFA
         post_ministep_hook = hook,
         relaxation = SimpleRelaxation(),
         max_nonlinear_iterations = 20,

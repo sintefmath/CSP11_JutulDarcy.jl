@@ -260,8 +260,8 @@ function map_to_reporting_grid(case, states::AbstractVector)
     end
 
     mapped_states = Dict[]
-    Jutul.ProgressMeter.@showprogress desc = "Mapping to dense grid." for state in states
-        s = map_to_reporting_grid(state, weights, total_weights, dims)
+    Jutul.ProgressMeter.@showprogress desc = "Mapping to dense grid." for (tno, state) in enumerate(states)
+            s = map_to_reporting_grid(state, weights, total_weights, dims)
         push!(mapped_states, s)
     end
     return mapped_states
@@ -282,22 +282,30 @@ function write_reporting_grid(case, states, pth, specase::Symbol)
         nz = 120
         # 8400 x 1200 m
         is_3d = false
+        ni = 840
+        nj = 120
+        nk = 1
     else
         # x, y, z
         pdims = [8400.0, 5000.0, 1200.]
         # 8400 x 5000 x 1200 m
         nx, ny, nz = 168, 100, 120
         is_3d = true
+        ni = 168
+        nj = 120
+        nk = 100
+    
     end
     dx = pdims[1]/nx
     dy = pdims[2]/ny
     dz = pdims[3]/nz
-
-    @assert length(states[1][:p]) == nx*ny*nz
+    if haskey(states[1], :p)
+        @assert length(states[1][:p]) == nx*ny*nz
+    end
     # spe11b_performance_spatial_map_1000y
 
     Jutul.ProgressMeter.@showprogress desc = "Writing dense grid." for (tno, state) in enumerate(states)
-        get_data(k) = reshape(state[k], nx, ny, nz)
+        get_data(k) = state[k]
         p = get_data(:p)
         sg = get_data(:sg)
         x_co2 = get_data(:x_co2)
@@ -309,11 +317,11 @@ function write_reporting_grid(case, states, pth, specase::Symbol)
 
         nyr = 5*(tno-1)
         file_pth = joinpath(pth, "spe11$(specase)_spatial_map_$(nyr)y.csv")
-        write_timestep_dense(file_pth, nx, ny, nz, dx, dy, dz, p, sg, x_co2, y_h2o, rho_g, rho_w, co2_mass, T, is_3d)
+        write_timestep_dense(file_pth, ni, nj, nk, dx, dy, dz, p, sg, x_co2, y_h2o, rho_g, rho_w, co2_mass, T, is_3d)
     end
 end
 
-function write_timestep_dense(file_pth, nx, ny, nz, dx, dy, dz, p, sg, x_co2, y_h2o, rho_g, rho_w, co2_mass, T, is_3d)
+function write_timestep_dense(file_pth, ni, nj, nk, dx, dy, dz, p, sg, x_co2, y_h2o, rho_g, rho_w, co2_mass, T, is_3d)
     f = open(file_pth, "w")
     if is_3d
         header = "# x [m], y [m], z [m], pressure [Pa], gas saturation [-], mass fraction of CO2 in liquid [-], mass fraction of H20 in vapor [-], phase mass density gas [kg/m3], phase mass density water [kg/m3], total mass CO2 [kg], temperature [C]"
@@ -321,26 +329,29 @@ function write_timestep_dense(file_pth, nx, ny, nz, dx, dy, dz, p, sg, x_co2, y_
         header = "# x [m], z [m], pressure [Pa], gas saturation [-], mass fraction of CO2 in liquid [-], mass fraction of H20 in vapor [-], phase mass density gas [kg/m3], phase mass density water [kg/m3], total mass CO2 [kg], temperature [C]"
     end
     println(f, header)
-    for k in 1:nz
-        for j in 1:ny
-            for i in 1:nx
+    ix = 1
+    for k in 1:nk
+        for j in 1:nj
+            for i in 1:ni
                 x = (i-0.5)*dx
-                y = (j-0.5)*dy
-                z = (k-0.5)*dz
+                y = (k-0.5)*dy
+                z = (j-0.5)*dz
                 # println("$tno: $i $j $k ($nx $ny $nz)")
                 if true
                 write_dense_line!(
                     f, x, y, z,
-                    p[i, j, k],
-                    sg[i, j, k], x_co2[i, j, k],
-                    y_h2o[i, j, k],
-                    rho_g[i, j, k],
-                    rho_w[i, j, k],
-                    co2_mass[i, j, k],
-                    T[i, j, k],
+                    p[ix],
+                    sg[ix],
+                    x_co2[ix],
+                    y_h2o[ix],
+                    rho_g[ix],
+                    rho_w[ix],
+                    co2_mass[ix],
+                    T[ix],
                     is_3d
                 )
                 end
+                ix += 1
             end
         end
     end

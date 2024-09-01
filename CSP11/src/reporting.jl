@@ -374,7 +374,7 @@ function write_dense_line!(f, x, y, z, p, sg, x_co2, y_h2o, rhog, rhow, mass_co2
 end
 
 function print_performance(pth, states, reports, specase::Symbol)
-    io = open(joinpath(pth, "spe11$(specase)_performance_time_series_detailed.csv"))
+    io = open(joinpath(pth, "spe11$(specase)_performance_time_series_detailed.csv"), "w")
     dt = report_timesteps(reports)
     current_time = 0.0
     total_cputime = 0.0
@@ -383,17 +383,17 @@ function print_performance(pth, states, reports, specase::Symbol)
     for (i, rep) in enumerate(reports)
         current_time += dt[i]
         total_cputime += rep[:total_time]
-    
+
         dt_avg = 0
         nsteps = 0
-    
+
         nfailed_steps = 0
         mass_co2 = sum(states[i][:TotalMasses][2, :])
         newtons = 0
         nresiduals = 0
         liniter = 0
         tlinsol = 0.0
-        
+
         for minirep in rep[:ministeps]
             ok = minirep[:success]
             st = minirep[:stats]
@@ -402,7 +402,7 @@ function print_performance(pth, states, reports, specase::Symbol)
             liniter += st.linear_iterations
             tlinsol += st.linear_setup + st.linear_solve
             nfailed_steps += !ok
-    
+
             if ok
                 dt_avg += minirep[:dt]
                 nsteps += 1

@@ -25,3 +25,4 @@ Manifest.toml
 *.json
 
 data/compare/*
+*.mat

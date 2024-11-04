@@ -23,3 +23,6 @@ docs/site/
 # environment.
 Manifest.toml
 *.json
+
+data/compare/*
+*.mat

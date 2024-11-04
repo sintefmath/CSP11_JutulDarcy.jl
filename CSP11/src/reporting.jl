@@ -336,8 +336,6 @@ function write_timestep_dense(file_pth, ni, nj, nk, dx, dy, dz, p, sg, x_co2, y_
                 x = (i-0.5)*dx
                 y = (k-0.5)*dy
                 z = (j-0.5)*dz
-                # println("$tno: $i $j $k ($nx $ny $nz)")
-                if true
                 write_dense_line!(
                     f, x, y, z,
                     p[ix],
@@ -347,10 +345,9 @@ function write_timestep_dense(file_pth, ni, nj, nk, dx, dy, dz, p, sg, x_co2, y_
                     rho_g[ix],
                     rho_w[ix],
                     co2_mass[ix],
-                    T[ix],
+                    T[ix] - 273.15,
                     is_3d
                 )
-                end
                 ix += 1
             end
         end

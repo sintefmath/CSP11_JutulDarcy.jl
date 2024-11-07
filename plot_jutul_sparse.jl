@@ -1,13 +1,18 @@
 using CSV, DataFrames
 using Jutul
 
-name1 = "horizon-cut_100x50_thermal_cv"
-name2 = "horizon-cut_100x50_thermal_cv"
+specase1 = :b
+name1 = "horizon-cut_100x50_thermal_cv_tpfa"
+name2 = "horizon-cut_100x50_thermal_cv_avgmpfa"
 
-output_folder = jutul_output_path("spe11b_$name1", subfolder = "csp11")
-output_folder2 = jutul_output_path("spe11b_$name2", subfolder = "csp11")
+# specase = :c
+# name1 = "horz_ndg_cut_PG_50x50x50_thermal_cv"
+# name2 = "struct50x50x50_thermal_cv"
 
-file_name = "spe11b_time_series.csv"
+output_folder = jutul_output_path("spe11$(specase)_$name1", subfolder = "csp11")
+output_folder2 = jutul_output_path("spe11$(specase)_$name2", subfolder = "csp11")
+
+file_name = "spe11$(specase)_time_series.csv"
 
 function resample_table(t, vals)
     t_rep = 3.1536e6 # 0.1 year
@@ -59,10 +64,10 @@ end
 
 
 tab = read_file(joinpath(output_folder, file_name))
-tab_name = "Case1"
+tab_name = "TPFA"
 
 tab2 = read_file(joinpath(output_folder2, file_name))
-tab2_name = "Case2"
+tab2_name = "AvgMPFA"
 ##
 # using CairoMakie
 using GLMakie
@@ -82,16 +87,18 @@ function plot_co2!(ax, tab, reg = :A; use_scatter = false, name = "", kwarg...)
     end
     if use_scatter
         f! = scatter!
+        ARG = SCATTER_ARG
     else
         f! = lines!
+        ARG = NamedTuple()
     end
     t = tab.t
     X = tab[reg]
-    f!(ax, t, X.mob, label = genlabel("mobile"); SCATTER_ARG...)
-    f!(ax, t, X.imm, label = genlabel("immobile"); SCATTER_ARG...)
-    f!(ax, t, X.diss, label = genlabel("dissolved"); SCATTER_ARG...)
-    f!(ax, t, X.seal, label = genlabel("in sealing"); SCATTER_ARG...)
-    f!(ax, t, X.mob + X.imm + X.diss, label = genlabel("total"); SCATTER_ARG...)
+    f!(ax, t, X.mob, label = genlabel("mobile"); ARG...)
+    f!(ax, t, X.imm, label = genlabel("immobile"); ARG...)
+    f!(ax, t, X.diss, label = genlabel("dissolved"); ARG...)
+    f!(ax, t, X.seal, label = genlabel("in sealing"); ARG...)
+    f!(ax, t, X.mob + X.imm + X.diss, label = genlabel("total"); ARG...)
 end
 
 function plot_pressure!(ax, tab; use_scatter = false, name = "", kwarg...)
@@ -100,8 +107,10 @@ function plot_pressure!(ax, tab; use_scatter = false, name = "", kwarg...)
     end
     if use_scatter
         f! = scatter!
+        ARG = SCATTER_ARG
     else
         f! = lines!
+        ARG = NamedTuple()
     end
     function genlabel(x)
         if name == ""
@@ -111,8 +120,8 @@ function plot_pressure!(ax, tab; use_scatter = false, name = "", kwarg...)
         end
     end
     t = tab.t
-    f!(t, tab.p1/1e6, label = genlabel("P1"); SCATTER_ARG...)
-    f!(t, tab.p2/1e6, label = genlabel("P2"); SCATTER_ARG...)
+    f!(t, tab.p1/1e6, label = genlabel("P1"); ARG...)
+    f!(t, tab.p2/1e6, label = genlabel("P2"); ARG...)
 end
 
 function plot_other!(ax, tab; use_scatter = false, name = "", kwarg...)
@@ -121,8 +130,10 @@ function plot_other!(ax, tab; use_scatter = false, name = "", kwarg...)
     end
     if use_scatter
         f! = scatter!
+        ARG = SCATTER_ARG
     else
         f! = lines!
+        ARG = NamedTuple()
     end
     function genlabel(x)
         if name == ""
@@ -132,8 +143,8 @@ function plot_other!(ax, tab; use_scatter = false, name = "", kwarg...)
         end
     end
     t = tab.t
-    f!(t, tab.sealTot, label = genlabel("seal"); SCATTER_ARG...)
-    f!(t, tab.boundTot, label = genlabel("bound"); SCATTER_ARG...)
+    f!(t, tab.sealTot, label = genlabel("seal"); ARG...)
+    f!(t, tab.boundTot, label = genlabel("bound"); ARG...)
 end
 
 fig = Figure(size = (1200, 800))

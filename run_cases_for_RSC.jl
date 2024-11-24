@@ -1,6 +1,6 @@
 using Jutul, JutulDarcy, HYPRE, CSP11
 include("get_RSC_basenames.jl")
-allcases = get_RSC_basenames(grids=[:C, :CC], resolutions=["10k"])
+allcases,  = get_RSC_basenames(grids=[:C, :HC, :CC, :QT, :T], resolutions=["10k", "50k"])
 allcases = [allcases]
 
 # kgrad_to_run = [:tpfa, :avgmpfa]
@@ -30,8 +30,8 @@ for cases_to_run in allcases
                 relaxation = SimpleRelaxation(),
                 max_nonlinear_iterations = 20,
                 max_timestep_cuts = 100,
-                output_states = true,
-                output_reports = true,
+                output_states = false,
+                output_reports = false,
                 info_level = 1
             );
         end

@@ -24,7 +24,7 @@ basename = "nudge_c_170x100x100"; specase = :c
 kg = :avgmpfa
 # kg = :ntpfa
 # kg = :tpfa_test
-# kg = :tpfa
+kg = :tpfa
 
 case, name = setup_spe11_case_from_mrst_grid(basename,
     case = specase,

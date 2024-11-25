@@ -1,11 +1,22 @@
 using Jutul, JutulDarcy, HYPRE, CSP11
 include("get_RSC_basenames.jl")
-allcases,  = get_RSC_basenames(grids=[:C, :HC, :CC, :QT, :T], resolutions=["10k", "50k"])
+allcases,  = get_RSC_basenames(grids=[:C, :HC, :CC, :QT, :T, :PEBI], resolutions=["100k"])
 allcases = [allcases]
 
+
+save_mrst_output = true
 # kgrad_to_run = [:tpfa, :avgmpfa]
 kgrad_to_run = [:tpfa]
 
+
+if save_mrst_output
+    extra_outputs = [:RelativePermeabilities,
+                     :LiquidMassFractions,
+                     :VaporMassFractions,
+                     :PhaseMassDensities]
+else
+    extra_outputs = false
+end
 for cases_to_run in allcases
     for kg in kgrad_to_run
         for basename in cases_to_run
@@ -14,7 +25,8 @@ for cases_to_run in allcases
                 case = specase,
                 thermal = true,
                 use_reporting_steps = true,
-                kgrad = kg
+                kgrad = kg,
+                extra_outputs = extra_outputs
             );
             domain = reservoir_domain(case.model)
             nc = number_of_cells(domain)
@@ -32,8 +44,18 @@ for cases_to_run in allcases
                 max_timestep_cuts = 100,
                 output_states = false,
                 output_reports = false,
-                info_level = 1
+                info_level = 1,
+                restart = false
             );
+            if save_mrst_output
+                mrst_output_path = pth*"_mrst"
+                res = simulate_reservoir(case,
+                    output_path = pth,
+                    restart = true
+                );
+                ws, states = res;
+                JutulDarcy.write_reservoir_simulator_output_to_mrst(case.model[:Reservoir], states, res.result.reports, case.forces, mrst_output_path)
+            end
         end
     end
 end

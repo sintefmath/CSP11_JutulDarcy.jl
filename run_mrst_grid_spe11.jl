@@ -21,6 +21,8 @@ basename = "c_85x50x40"; specase = :c
 # basename = "struct100x100x100"; specase = :c
 
 basename = "nudge_c_170x100x100"; specase = :c
+
+basename = "b_C_140x75";specase = :b
 kg = :avgmpfa
 # kg = :ntpfa
 # kg = :tpfa_test
@@ -30,7 +32,7 @@ case, name = setup_spe11_case_from_mrst_grid(basename,
     case = specase,
     thermal = true,
     nstep_initialization = 0,
-    use_reporting_steps = false,
+    use_reporting_steps = true,
     # dz_max = 0.1,
     kgrad = kg
 );

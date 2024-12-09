@@ -1,12 +1,15 @@
 using Jutul, JutulDarcy, HYPRE, CSP11
 include("get_RSC_basenames.jl")
-allcases,  = get_RSC_basenames(grids=[:C, :HC, :CC, :QT, :T, :PEBI], resolutions=["100k"])
+allcases,  = get_RSC_basenames(grids=[:C, :HC, :CC, :PEBI, :QT, :T], resolutions=["100k"])
+# allcases,  = get_RSC_basenames(grids=[:C], resolutions=["10k"])
+
 allcases = [allcases]
 
-
+restart = true
 save_mrst_output = true
 # kgrad_to_run = [:tpfa, :avgmpfa]
-kgrad_to_run = [:tpfa]
+# kgrad_to_run = [:tpfa, :avgmpfa, :ntpfa]
+kgrad_to_run = [:ntpfa]
 
 
 if save_mrst_output
@@ -23,7 +26,7 @@ for cases_to_run in allcases
             specase = Symbol(basename[1])
             case, name = setup_spe11_case_from_mrst_grid(basename,
                 case = specase,
-                thermal = true,
+                thermal = false,
                 use_reporting_steps = true,
                 kgrad = kg,
                 extra_outputs = extra_outputs
@@ -44,8 +47,8 @@ for cases_to_run in allcases
                 max_timestep_cuts = 100,
                 output_states = false,
                 output_reports = false,
-                info_level = 1,
-                restart = false
+                info_level = 0,
+                restart = restart
             );
             if save_mrst_output
                 mrst_output_path = pth*"_mrst"

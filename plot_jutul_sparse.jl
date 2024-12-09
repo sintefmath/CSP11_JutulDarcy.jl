@@ -1,16 +1,18 @@
 using CSV, DataFrames
 using Jutul
 
-specase1 = :b
-name1 = "horizon-cut_100x50_thermal_cv_tpfa"
-name2 = "horizon-cut_100x50_thermal_cv_avgmpfa"
+specase = :b
+cases, = get_RSC_basenames(grids=[:C, :HC], resolutions=["10k"])
+name1 = cases[1]
+name2 = cases[2]
+
 
 # specase = :c
 # name1 = "horz_ndg_cut_PG_50x50x50_thermal_cv"
 # name2 = "struct50x50x50_thermal_cv"
 
-output_folder = jutul_output_path("spe11$(specase)_$name1", subfolder = "csp11")
-output_folder2 = jutul_output_path("spe11$(specase)_$name2", subfolder = "csp11")
+output_folder = jutul_output_path("spe11$(specase)_$(name1)_thermal_cv_tpfa", subfolder = "csp11_rsc")
+output_folder2 = jutul_output_path("spe11$(specase)_$(name2)_thermal_cv_tpfa", subfolder = "csp11_rsc")
 
 file_name = "spe11$(specase)_time_series.csv"
 
@@ -64,10 +66,10 @@ end
 
 
 tab = read_file(joinpath(output_folder, file_name))
-tab_name = "TPFA"
+tab_name = "C"
 
 tab2 = read_file(joinpath(output_folder2, file_name))
-tab2_name = "AvgMPFA"
+tab2_name = "HC"
 ##
 # using CairoMakie
 using GLMakie

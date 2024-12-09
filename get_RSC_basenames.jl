@@ -3,12 +3,12 @@ function get_RSC_basenames(;grids = [:C, :HC, :CC, :PEBI, :QT, :T],
     if specase == :b
         # Dictionary mapping resolution symbols to their specs [cartesian, QT_ref, T_ref]
         resolutionDict = Dict(
-            "10k"  => ["140x75", "1_2", "1_3"],
-            "50k"  => ["500x100", "0_38", "0_54"],
-            "100k" => ["840x120", "0_25", "0_37"],
-            "200k" => ["1180x170", "0_17", "0_26"],
-            "500k" => ["1870x270", "0_103", "0_160"],
-            "1M"   => ["2640x380", "0_071", "0_112"]
+            "10k"  => ["140x75", "1_2", "1_25"],
+            "50k"  => ["500x100", "0_54", "0_52"],
+            "100k" => ["840x120", "0_38", "0_36"],
+            "200k" => ["1180x170", "0_28", "0_25"],
+            "500k" => ["1870x270", "0_175", "0_16"],
+            "1M"   => ["2640x380", "0_125", "0_112"]
         )
     else
         error("specase $specase not yet supported")

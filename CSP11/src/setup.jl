@@ -275,7 +275,7 @@ function rock_props_from_satnum(satnum, case)
 end
 
 function setup_reservoir_model_csp11(reservoir::DataDomain; include_satfun = true, kwarg...)
-    model, parameters = setup_reservoir_model(reservoir, :co2brine; kwarg...)
+    model, parameters = setup_reservoir_model(reservoir, :co2brine; co2_source = :csp11, kwarg...)
     if include_satfun
         pth_data = joinpath(@__DIR__, "..", "..", "small_pyopm", "130_62", "CSP11B_DISGAS.DATA")
         case_cpgrid = setup_case_from_data_file(pth_data)

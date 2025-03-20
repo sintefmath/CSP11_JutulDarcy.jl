@@ -1,6 +1,10 @@
 # Exactly 365 days in a year in spec
 const spe11_year = 365*si_unit(:day)
 
+function get_path_to_matfile(basename)
+    dirname = joinpath(@__DIR__, "..", "..", "data")
+    pth = joinpath(dirname, "$basename.mat")
+end
 
 function setup_spe11_case_from_mrst_grid(basename;
         case = :b,
@@ -13,9 +17,7 @@ function setup_spe11_case_from_mrst_grid(basename;
         kgrad = :tpfa,
         kwarg...
     )
-    dirname = joinpath(@__DIR__, "..", "..", "data")
-
-    pth = joinpath(dirname, "$basename.mat")
+    pth = get_path_to_matfile(basename)
     domain, wells, matfile = reservoir_domain_and_wells_csp11(pth, case);
 
     # return domain, wells
@@ -335,7 +337,7 @@ function setup_reservoir_forces_and_timesteps_csp11(model, case = :b;
     H_tab = tables[:enthalpy]
     co2_H_eval(p, T) = H_tab(p, T)[2]
     H_well = co2_H_eval
-    # H_well = missing
+    H_well = missing
 
     rmodel = JutulDarcy.reservoir_model(model)
     rho_brine, rho_co2 = JutulDarcy.reference_densities(rmodel.system)

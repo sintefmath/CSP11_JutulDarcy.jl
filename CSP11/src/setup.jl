@@ -636,6 +636,162 @@ function rock_props_from_satnum(satnum, case)
     return (perm, poro)
 end
 
+const spe11_wetting_immobile_saturation = (0.32, 0.14, 0.12, 0.12, 0.12, 0.10)
+const spe11_nonwetting_immobile_saturation = 0.10
+const spe11_relative_permeability_exponent = 1.5
+const spe11_capillary_pressure_exponent = 1.5
+const spe11_max_capillary_pressure = 3.0e7
+const spe11_leverett_coefficient = 6.12e-3
+
+function spe11_phase_relative_permeability(immobile, label; n = 65)
+    effective_saturation = range(0.0, 1.0; length = n)
+    saturation = immobile .+ (1.0 - immobile).*effective_saturation
+    kr = effective_saturation.^spe11_relative_permeability_exponent
+    return PhaseRelativePermeability(saturation, kr; label = label)
+end
+
+function spe11_erf(x)
+    ax = abs(x)
+    if ax < 0.5
+        # The power series is accurate and well-conditioned near zero.
+        term = total = ax
+        for n in 1:100
+            term *= -ax^2/n
+            increment = term/(2n + 1)
+            total += increment
+            abs(increment) <= eps(Float64)*abs(total) && break
+        end
+        value = 2.0/sqrt(pi)*total
+    else
+        # Compact approximation with a maximum absolute error around 3e-8.
+        t = 1.0/(1.0 + 0.5ax)
+        polynomial = 0.17087277
+        polynomial = -0.82215223 + t*polynomial
+        polynomial = 1.48851587 + t*polynomial
+        polynomial = -1.13520398 + t*polynomial
+        polynomial = 0.27886807 + t*polynomial
+        polynomial = -0.18628806 + t*polynomial
+        polynomial = 0.09678418 + t*polynomial
+        polynomial = 0.37409196 + t*polynomial
+        polynomial = 1.00002368 + t*polynomial
+        tail = t*exp(-ax^2 - 1.26551223 + t*polynomial)
+        value = 1.0 - tail
+    end
+    return signbit(x) ? -value : value
+end
+
+function spe11_capillary_pressure(sg, immobile, entry_pressure)
+    sw = 1.0 - sg
+    normalized_sw = max((sw - immobile)/(1.0 - immobile), 0.0)
+    if iszero(normalized_sw)
+        return spe11_max_capillary_pressure
+    end
+    pc_unbounded = entry_pressure*normalized_sw^(-1.0/spe11_capillary_pressure_exponent)
+    erf_argument = pc_unbounded/spe11_max_capillary_pressure*sqrt(pi)/2.0
+    return spe11_max_capillary_pressure*spe11_erf(erf_argument)
+end
+
+function spe11_capillary_pressure_table(immobile, entry_pressure;
+        relative_tolerance = 1e-3,
+        absolute_tolerance = 1.0
+    )
+    pc(sg) = spe11_capillary_pressure(sg, immobile, entry_pressure)
+    mobile_limit = 1.0 - immobile
+    effective_saturation = vcat(
+        collect(range(0.0, 1.0; length = 17)),
+        10.0.^range(-14.0, 0.0; length = 33)
+    )
+    sort!(effective_saturation)
+    unique!(effective_saturation)
+    points = 1.0 .- (immobile .+ (1.0 - immobile).*effective_saturation)
+    push!(points, 1.0)
+    sort!(points)
+    unique!(points)
+
+    function refine_interval!(lo, hi, pc_lo, pc_hi, level = 0)
+        level == 40 && return
+        midpoint = (lo + hi)/2.0
+        pc_midpoint = pc(midpoint)
+        needs_refinement = any((0.25, 0.5, 0.75)) do fraction
+            sg = lo + fraction*(hi - lo)
+            pc_exact = pc(sg)
+            pc_linear = pc_lo + fraction*(pc_hi - pc_lo)
+            tolerance = max(absolute_tolerance, relative_tolerance*abs(pc_exact))
+            abs(pc_exact - pc_linear) > tolerance
+        end
+        if needs_refinement
+            push!(points, midpoint)
+            refine_interval!(lo, midpoint, pc_lo, pc_midpoint, level + 1)
+            refine_interval!(midpoint, hi, pc_midpoint, pc_hi, level + 1)
+        end
+        return
+    end
+
+    initial_points = copy(points)
+    for i in 1:(length(initial_points) - 1)
+        lo = initial_points[i]
+        hi = initial_points[i + 1]
+        refine_interval!(lo, hi, pc(lo), pc(hi))
+    end
+    sort!(points)
+    pressure = pc.(points)
+    return Jutul.LinearInterpolant(points, pressure; constant_dx = false)
+end
+
+"""
+    spe11_saturation_functions(satnum)
+
+Construct the SPE11B/C Brooks-Corey relative-permeability and capillary-
+pressure functions directly from the benchmark parameters. The original
+PYOPMSPE11 deck represented the same functions with 200,000 coupled `SGOF`
+rows per permeable facies. Relative permeability is sampled independently on a
+small uniform effective-saturation grid, while capillary pressure uses adaptive
+sampling around its much sharper transition.
+"""
+function spe11_saturation_functions(satnum)
+    regions = Int.(vec(satnum))
+    all(in(1:7), regions) || throw(ArgumentError("SPE11 saturation regions must be in 1:7"))
+
+    gas = spe11_phase_relative_permeability(
+        spe11_nonwetting_immobile_saturation, :g)
+    impermeable_gas = PhaseRelativePermeability([0.0, 1.0], [0.0, 1.0]; label = :g)
+    gas_tables = ntuple(i -> i == 7 ? impermeable_gas : gas, 7)
+
+    impermeable_liquid = PhaseRelativePermeability([0.0, 1.0], [0.0, 1.0]; label = :og)
+    liquid_tables = ntuple(7) do i
+        if i == 7
+            impermeable_liquid
+        else
+            spe11_phase_relative_permeability(spe11_wetting_immobile_saturation[i], :og)
+        end
+    end
+    relative_permeabilities = JutulDarcy.ReservoirRelativePermeabilities(;
+        og = liquid_tables,
+        g = gas_tables,
+        regions = regions
+    )
+
+    porosity = (0.10, 0.20, 0.20, 0.20, 0.25, 0.35)
+    horizontal_permeability = (1e-16, 1e-13, 2e-13, 5e-13, 1e-12, 2e-12)
+    capillary_tables = ntuple(7) do i
+        if i == 7
+            # The deck used a two-point fallback for the impermeable facies.
+            Jutul.LinearInterpolant(
+                [0.0, 1.0], [0.0, spe11_max_capillary_pressure];
+                constant_dx = true
+            )
+        else
+            entry_pressure = spe11_leverett_coefficient*sqrt(
+                porosity[i]/horizontal_permeability[i])
+            spe11_capillary_pressure_table(
+                spe11_wetting_immobile_saturation[i], entry_pressure)
+        end
+    end
+    capillary_pressure = JutulDarcy.SimpleCapillaryPressure(
+        (capillary_tables, ); regions = regions)
+    return relative_permeabilities, capillary_pressure
+end
+
 function setup_reservoir_model_csp11(reservoir::DataDomain; include_satfun = true, kwarg...)
     model, parameters = setup_reservoir_model(reservoir, :co2brine;
         co2_source = :csp11,
@@ -643,23 +799,7 @@ function setup_reservoir_model_csp11(reservoir::DataDomain; include_satfun = tru
         kwarg...
     )
     if include_satfun
-        pth_data = joinpath(@__DIR__, "..", "..", "small_pyopm", "130_62", "CSP11B_DISGAS.DATA")
-        case_cpgrid = setup_case_from_data_file(pth_data)
-        model_cp = case_cpgrid.model
-        # TODO: These have not been added manually yet. Remove once replaced with analytical versions
-        kr = deepcopy(model_cp[:Reservoir][:RelativePermeabilities])
-        pc = deepcopy(model_cp[:Reservoir][:CapillaryPressure])
-
-        empty!(kr.regions)
-        empty!(pc.regions)
-        for c in reservoir[:satnum]
-            push!(kr.regions, c)
-            push!(pc.regions, c)
-        end
-
-        for cap in pc.pc[1]
-            # @. cap.F = abs(cap.F)
-        end
+        kr, pc = spe11_saturation_functions(reservoir[:satnum])
         set_secondary_variables!(model[:Reservoir],
             RelativePermeabilities = kr,
             CapillaryPressure = pc

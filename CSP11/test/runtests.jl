@@ -28,11 +28,48 @@ end
     @test maximum(domain_c[:permeability][5, :]) > 0
 end
 
+@testset "Direct SPE11 saturation functions" begin
+    @test CSP11.spe11_erf(0.0) == 0.0
+    @test CSP11.spe11_erf(0.5) ≈ 0.5204998778130465 atol = 3.1e-8
+    @test CSP11.spe11_erf(1.0) ≈ 0.8427007929497149 atol = 3.1e-8
+    @test CSP11.spe11_erf(-2.0) ≈ -0.9953222650189527 atol = 3.1e-8
+
+    satnum = collect(1:7)
+    kr, pc = CSP11.spe11_saturation_functions(satnum)
+    @test kr.regions == satnum
+    @test pc.regions == satnum
+
+    expected_half = 0.5^1.5
+    @test kr.krg[1](0.55) ≈ expected_half rtol = 5e-4
+    @test kr.krog[2](0.57) ≈ expected_half rtol = 5e-4
+    @test kr.krg[1](0.10) ≈ 0.0 atol = 1e-15
+    @test kr.krog[1](0.32) ≈ 0.0 atol = 1e-15
+
+    entry_pressure_facies_2 = 6.12e-3*sqrt(0.20/1e-13)
+    @test pc.pc[1][2](0.0) ≈ entry_pressure_facies_2 rtol = 1e-7
+    @test pc.pc[1][2](0.86) ≈ 3e7
+    @test sum(length(table.X) for table in pc.pc[1]) < 2000
+    @test all(length(table.k.X) < 100 for table in kr.krg)
+    @test all(length(table.k.X) < 100 for table in kr.krog)
+
+    for region in 1:6
+        immobile = CSP11.spe11_wetting_immobile_saturation[region]
+        entry_pressure = 6.12e-3*sqrt(
+            (0.10, 0.20, 0.20, 0.20, 0.25, 0.35)[region]/
+            (1e-16, 1e-13, 2e-13, 5e-13, 1e-12, 2e-12)[region]
+        )
+        table = pc.pc[1][region]
+        for sg in range(0.0, 1.0; length = 1001)
+            exact = CSP11.spe11_capillary_pressure(sg, immobile, entry_pressure)
+            @test table(sg) ≈ exact rtol = 1.1e-3 atol = 1.0
+        end
+    end
+end
+
 @testset "Complete Cartesian case" begin
     case_b, name = CSP11.setup_spe11_case((20, 10);
         case = :b,
         thermal = false,
-        include_satfun = false,
         nstep_initialization = 0,
         nstep_injection1 = 1,
         nstep_injection2 = 1,

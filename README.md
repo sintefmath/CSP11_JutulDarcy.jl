@@ -1,6 +1,6 @@
 # CSP11_JutulDarcy.jl
 
-Simulate the [CSP11](https://www.spe.org/en/csp/) CO2 storage benchmark using [JutulDarcy.jl](https://github.com/sintefmath/JutulDarcy.jl) on meshes made in [MRST](https://mrst.no/). Currently contains scripts for case B and C only.
+Simulate the [CSP11](https://www.spe.org/en/csp/) CO2 storage benchmark using [JutulDarcy.jl](https://github.com/sintefmath/JutulDarcy.jl)  on meshes made in [MRST](https://mrst.no/). Currently contains scripts for case B and C only (or experimentally on custom meshes).
 
 ## First time setup
 
@@ -20,7 +20,28 @@ instantiate # Add dependencies and precompile
 
 ## Running cases
 
-You can now run the example:
+Cases B and C can be set up from `.mat` grid files (from MRST) or from Cartesian meshes, or pre-constructed meshes. Facies are read
+from a bundled copy of the [official SPE11 geometry](https://github.com/Simulation-Benchmarks/11thSPE-CSP/tree/main/geometries):
+
+```julia
+using CSP11
+
+# 400 by 60 cells in the x/depth plane (one metre nominal thickness)
+case_b, name_b = setup_spe11_case((400, 60); case = :b)
+
+# 85 by 50 by 40 cells in x/y/depth, warped into the physical C geometry
+case_c, name_c = setup_spe11_case((85, 50, 40); case = :c)
+```
+
+An already constructed `DataDomain` can be used in the same way. It must
+contain permeability and porosity; facies are inferred from the bundled
+official SPE11 geometry if `:satnum` is absent:
+
+```julia
+case_b, name_b = setup_spe11_case(domain; case = :b)
+```
+
+The original MRST example is still available:
 
 ```julia
 include("run_mrst_grid_spe11.jl")

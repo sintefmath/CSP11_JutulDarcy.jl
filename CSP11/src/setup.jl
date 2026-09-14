@@ -6,8 +6,25 @@ function get_path_to_matfile(basename)
     pth = joinpath(dirname, "$basename.mat")
 end
 
-function setup_spe11_case_from_mrst_grid(basename;
+"""
+    setup_spe11_case(domain_or_dims; case = :b, ...)
+
+Set up SPE11B or SPE11C from either an existing reservoir `DataDomain` or a
+tuple of Cartesian dimensions. For B, dimensions are `(nx, nz)` (or `(nx, 1,
+nz)`); for C they are `(nx, ny, nz)`.
+
+An existing domain is augmented in-place with benchmark wells, reporting
+regions, observation points and boundary conditions. It must provide
+`:permeability` and `:porosity`; `:satnum` is inferred from the geometry when
+missing.
+"""
+function setup_spe11_case(domain_or_dims;
         case = :b,
+        name = nothing,
+        wells = nothing,
+        input_data = Dict{String, Any}("spe11_case" => String(case)),
+        domain_kwargs = NamedTuple(),
+        well_kwargs = NamedTuple(),
         thermal = true,
         nstep_initialization = thermal*10,
         nstep_injection1 = 50,
@@ -17,16 +34,62 @@ function setup_spe11_case_from_mrst_grid(basename;
         kgrad = :tpfa,
         kwarg...
     )
-    pth = get_path_to_matfile(basename)
-    domain, wells, matfile = reservoir_domain_and_wells_csp11(pth, case);
+    case in (:b, :c) || throw(ArgumentError("Only SPE11 cases :b and :c are supported"))
+    if domain_or_dims isa Tuple && all(x -> x isa Integer, domain_or_dims)
+        dims = Tuple(Int.(domain_or_dims))
+        domain = setup_spe11_domain(dims; case = case, domain_kwargs...)
+        source_name = "cartesian_$(join(dims, 'x'))"
+    elseif domain_or_dims isa DataDomain
+        domain = domain_or_dims
+        prepare_spe11_domain!(domain, case)
+        source_name = "domain"
+    else
+        throw(ArgumentError("Expected a reservoir DataDomain or a tuple of Cartesian dimensions"))
+    end
 
-    # return domain, wells
+    if isnothing(wells)
+        wells = setup_spe11_wells!(domain, case; well_kwargs...)
+    elseif !haskey(domain, :well_cells)
+        throw(ArgumentError("A domain used with custom wells must define domain[:well_cells]"))
+    end
+    if isnothing(name)
+        name = source_name
+    end
+    return _setup_spe11_case(domain, wells;
+        case = case,
+        name = name,
+        input_data = input_data,
+        thermal = thermal,
+        nstep_initialization = nstep_initialization,
+        nstep_injection1 = nstep_injection1,
+        nstep_injection2 = nstep_injection2,
+        nstep_migration = nstep_migration,
+        use_reporting_steps = use_reporting_steps,
+        kgrad = kgrad,
+        kwarg...
+    )
+end
+
+function _setup_spe11_case(domain, wells;
+        case,
+        name,
+        input_data,
+        thermal,
+        nstep_initialization,
+        nstep_injection1,
+        nstep_injection2,
+        nstep_migration,
+        use_reporting_steps,
+        kgrad,
+        kwarg...
+    )
+
     if thermal
         othername = "thermal_cv"
     else
         othername = "isothermal"
     end
-    name = "spe11$(case)_$(basename)_$(othername)_$kgrad"
+    name = "spe11$(case)_$(name)_$(othername)_$kgrad"
 
     model, parameters = setup_reservoir_model_csp11(domain;
         wells = wells,
@@ -90,8 +153,305 @@ function setup_spe11_case_from_mrst_grid(basename;
 
     state0 = setup_state0_csp11(model, case) #check for c
 
-    case = JutulCase(model, dt, forces; state0 = state0, parameters = parameters, input_data = matfile)
-    return (case, name)
+    simulation_case = JutulCase(model, dt, forces;
+        state0 = state0,
+        parameters = parameters,
+        input_data = input_data
+    )
+    return (simulation_case, name)
+end
+
+"""
+    setup_spe11_case_from_mrst_grid(basename; kwarg...)
+
+Compatibility wrapper for the original MRST/MAT setup path. New code should
+call [`setup_spe11_case`](@ref) with a domain or Cartesian dimensions.
+"""
+function setup_spe11_case_from_mrst_grid(basename;
+        case = :b,
+        thermal = true,
+        nstep_initialization = thermal*10,
+        nstep_injection1 = 50,
+        nstep_injection2 = 50,
+        nstep_migration = 100,
+        use_reporting_steps = true,
+        kgrad = :tpfa,
+        kwarg...
+    )
+    pth = get_path_to_matfile(basename)
+    domain, wells, matfile = reservoir_domain_and_wells_csp11(pth, case)
+    return _setup_spe11_case(domain, wells;
+        case = case,
+        name = basename,
+        input_data = matfile,
+        thermal = thermal,
+        nstep_initialization = nstep_initialization,
+        nstep_injection1 = nstep_injection1,
+        nstep_injection2 = nstep_injection2,
+        nstep_migration = nstep_migration,
+        use_reporting_steps = use_reporting_steps,
+        kgrad = kgrad,
+        kwarg...
+    )
+end
+
+"""
+    setup_spe11_domain(dims; case = :b, kwarg...)
+
+Construct a complete Cartesian SPE11 reservoir domain directly from the
+published geometry. `dims` is `(nx, nz)` for B and `(nx, ny, nz)` for C. The
+case-C mesh is warped into physical space according to the benchmark mapping.
+"""
+function setup_spe11_domain(dims::Tuple; case = :b, kwarg...)
+    case in (:b, :c) || throw(ArgumentError("Only SPE11 cases :b and :c are supported"))
+    all(x -> x isa Integer, dims) || throw(ArgumentError("Cartesian dimensions must be integers"))
+    dims = Tuple(Int.(dims))
+    all(>(0), dims) || throw(ArgumentError("All Cartesian dimensions must be positive"))
+    if case == :b
+        if length(dims) == 2
+            nx, nz = dims
+            mesh_dims = (nx, 1, nz)
+        elseif length(dims) == 3 && dims[2] == 1
+            mesh_dims = dims
+        else
+            throw(ArgumentError("SPE11B dimensions must be (nx, nz) or (nx, 1, nz)"))
+        end
+        physical_size = (spe11_size_x, 1.0, spe11_size_z)
+    else
+        length(dims) == 3 || throw(ArgumentError("SPE11C dimensions must be (nx, ny, nz)"))
+        mesh_dims = dims
+        physical_size = (spe11_size_x, spe11_size_y, spe11_size_z)
+    end
+
+    mesh = UnstructuredMesh(CartesianMesh(mesh_dims, physical_size), z_is_depth = true)
+    if case == :c
+        for (i, p) in enumerate(mesh.node_points)
+            mesh.node_points[i] = SVector(p[1], p[2], p[3] - spe11c_elevation_offset(p[2]))
+        end
+    end
+
+    cc = tpfv_geometry(mesh).cell_centroids
+    satnum = Vector{Int}(undef, size(cc, 2))
+    for i in eachindex(satnum)
+        satnum[i] = spe11_facies(cc[1, i], cc[2, i], cc[3, i]; case = case)
+    end
+    permeability, porosity = rock_props_from_satnum(satnum, case)
+    if case == :c
+        permeability = transform_spe11c_permeability(permeability, cc[2, :])
+    end
+    # `reservoir_domain` currently checks every compact-tensor entry for
+    # non-negativity, although physically valid off-diagonal entries may be
+    # negative. Initialize with magnitudes and install the signed tensor after
+    # the domain has been constructed.
+    permeability_for_constructor = case == :c ? abs.(permeability) : permeability
+    domain = reservoir_domain_csp11(mesh, case;
+        satnum = satnum,
+        permeability = permeability_for_constructor,
+        porosity = porosity,
+        kwarg...
+    )
+    if case == :c
+        domain[:permeability, Cells()] = permeability
+    end
+    prepare_spe11_domain!(domain, case)
+    return domain
+end
+
+function transform_spe11c_permeability(permeability, y)
+    nc = length(y)
+    size(permeability) == (3, nc) || throw(ArgumentError("Expected a 3×$nc diagonal permeability array"))
+    out = zeros(eltype(permeability), 6, nc)
+    for i in 1:nc
+        k_h = permeability[1, i]
+        k_v = permeability[3, i]
+        # Derivative of the physical elevation offset in Eq. (4.1). Our third
+        # coordinate is depth-positive, hence the negative yz cross term.
+        slope = -3/25*((y[i] - 2500.0)/2500.0) + 1/500
+        out[:, i] .= (k_h, 0.0, 0.0, k_h, -slope*k_h, k_v + slope^2*k_h)
+    end
+    return out
+end
+
+function _add_spe11_thermal_properties!(domain)
+    satnum = domain[:satnum]
+    nc = number_of_cells(domain)
+    conductivity_by_facies = [1.9, 1.25, 1.25, 1.25, 0.92, 0.26, 2.0]
+    if !haskey(domain, :rock_thermal_conductivity)
+        domain[:rock_thermal_conductivity, Cells()] = conductivity_by_facies[satnum]
+    end
+    if !haskey(domain, :diffusion)
+        diffusion = repeat([1e-9, 2e-8], 1, nc)
+        diffusion[:, satnum .== 7] .= 0.0
+        domain[:diffusion] = diffusion
+    end
+    if !haskey(domain, :fluid_thermal_conductivity)
+        domain[:fluid_thermal_conductivity, Cells()] = repeat([0.6, 0.088], 1, nc)
+    end
+    if !haskey(domain, :rock_density)
+        domain[:rock_density, Cells()] = fill(2500.0, nc)
+    end
+    if !haskey(domain, :component_heat_capacity)
+        domain[:component_heat_capacity, Cells()] = repeat([4100.0, 950.0], 1, nc)
+    end
+    if !haskey(domain, :rock_heat_capacity)
+        domain[:rock_heat_capacity, Cells()] = fill(850.0, nc)
+    end
+    if !haskey(domain, :temperature)
+        domain[:temperature, Cells()] = fill(333.15, nc)
+    end
+    return domain
+end
+
+function _spe11_reporting_regions!(domain, case)
+    haskey(domain, :A) && haskey(domain, :B) && haskey(domain, :C) && return domain
+    cc = domain[:cell_centroids]
+    nc = size(cc, 2)
+    A = zeros(nc)
+    B = zeros(nc)
+    C = zeros(nc)
+    if case == :b
+        boxes = ((3300.0, 8300.0, 0.0, 600.0),
+                 (100.0, 3300.0, 600.0, 1200.0),
+                 (3300.0, 7800.0, 100.0, 400.0))
+    else
+        boxes = ((3300.0, 8300.0, 0.0, 750.0),
+                 (100.0, 3300.0, 750.0, 1350.0),
+                 (3300.0, 7800.0, 250.0, 550.0))
+    end
+    for i in 1:nc
+        x = cc[1, i]
+        elevation = spe11_size_z - cc[3, i]
+        for (weights, box) in zip((A, B, C), boxes)
+            xmin, xmax, zmin, zmax = box
+            weights[i] = xmin <= x <= xmax && zmin <= elevation <= zmax
+        end
+    end
+    domain[:A, Cells()] = A
+    domain[:B, Cells()] = B
+    domain[:C, Cells()] = C
+    return domain
+end
+
+function _spe11_boundary_conditions!(domain, case)
+    if !haskey(domain, :boundary)
+        satnum = domain[:satnum]
+        volumes = domain[:volumes]
+        buffer_cells = Int[]
+        boundary_centroids = domain[:boundary_centroids]
+        ymin, ymax = extrema(boundary_centroids[2, :])
+        ytol = max(1.0, ymax - ymin)*1e-8
+        for face in eachindex(domain[:boundary_neighbors])
+            normal = domain[:boundary_normals][:, face]
+            cell = domain[:boundary_neighbors][face]
+            on_x_side = abs(normal[1]) > abs(normal[2]) + abs(normal[3])
+            y = boundary_centroids[2, face]
+            on_c_front_or_back = case == :c && (abs(y - ymin) <= ytol || abs(y - ymax) <= ytol)
+            if (on_x_side || on_c_front_or_back) && satnum[cell] in 2:5
+                volumes[cell] += 5e4*domain[:boundary_areas][face]
+                push!(buffer_cells, cell)
+            end
+        end
+        unique!(buffer_cells)
+        domain[:boundary, nothing] = buffer_cells
+        is_boundary = falses(number_of_cells(domain))
+        is_boundary[buffer_cells] .= true
+        domain[:is_boundary, Cells()] = is_boundary
+    end
+
+    if !haskey(domain, :spe11_fixed_temperature_boundaries)
+        z_mid = median(domain[:cell_centroids][3, :])
+        top_cells = Int[]
+        bottom_cells = Int[]
+        for face in eachindex(domain[:boundary_neighbors])
+            normal = domain[:boundary_normals][:, face]
+            if abs(normal[3]) > abs(normal[1]) + abs(normal[2])
+                cell = domain[:boundary_neighbors][face]
+                if domain[:boundary_centroids][3, face] > z_mid
+                    push!(bottom_cells, cell)
+                else
+                    push!(top_cells, cell)
+                end
+            end
+        end
+        unique!(top_cells)
+        unique!(bottom_cells)
+        domain[:rock_heat_capacity][top_cells] .*= 1e5
+        domain[:rock_heat_capacity][bottom_cells] .*= 1e5
+        domain[:spe11_fixed_temperature_boundaries, nothing] = true
+    end
+    return domain
+end
+
+function _spe11_observation_points!(domain, case)
+    haskey(domain, :observation_points) && return domain
+    if case == :b
+        points = ([4500.0, 0.5, 700.0], [5100.0, 0.5, 100.0])
+    else
+        points = ([4500.0, 2500.0, 545.0], [5100.0, 2500.0, -55.0])
+    end
+    cc = domain[:cell_centroids]
+    cell_points = vec(reinterpret(SVector{3, Float64}, cc))
+    observations = zeros(Int, number_of_cells(domain))
+    for (i, point) in enumerate(points)
+        observations[find_closest_point(cell_points, point)] = i
+    end
+    domain[:observation_points, Cells()] = observations
+    return domain
+end
+
+function prepare_spe11_domain!(domain::DataDomain, case)
+    case in (:b, :c) || throw(ArgumentError("Only SPE11 cases :b and :c are supported"))
+    for key in (:permeability, :porosity)
+        haskey(domain, key) || throw(ArgumentError("The supplied domain must define :$key"))
+    end
+    if !haskey(domain, :satnum)
+        cc = domain[:cell_centroids]
+        satnum = [spe11_facies(cc[1, i], cc[2, i], cc[3, i]; case = case) for i in axes(cc, 2)]
+        domain[:satnum, Cells()] = satnum
+    end
+    _add_spe11_thermal_properties!(domain)
+    _spe11_reporting_regions!(domain, case)
+    _spe11_boundary_conditions!(domain, case)
+    _spe11_observation_points!(domain, case)
+    return domain
+end
+
+function _spe11_trajectory_cells(domain, trajectory; n = 501)
+    mesh = physical_representation(domain) |> UnstructuredMesh
+    cells, extra = Jutul.find_enclosing_cells(mesh, trajectory; n = n, extra_out = true)
+    isempty(cells) && error("The SPE11 well trajectory did not intersect the supplied domain")
+    lengths = extra[:lengths]
+    return cells, lengths
+end
+
+function setup_spe11_wells!(domain::DataDomain, case; kwarg...)
+    default_options = (simple_well = true, radius = 0.15, dir = :y)
+    options = merge(default_options, values(kwarg))
+    if case == :b
+        cc = domain[:cell_centroids]
+        points = vec(reinterpret(SVector{3, Float64}, cc))
+        well_points = ([2700.0, 0.5, 900.0], [5100.0, 0.5, 500.0])
+        well_cells = [find_closest_point(points, p) for p in well_points]
+        wells = [setup_well(domain, well_cells[i]; options..., name = Symbol(:INJ, i-1)) for i in 1:2]
+        domain[:well_cells, nothing] = well_cells
+    else
+        trajectory1 = [2700.0 1000.0 900.0; 2700.0 4000.0 900.0]
+        y = collect(range(1000.0, 4000.0, length = 101))
+        trajectory2 = hcat(fill(5100.0, length(y)), y, 500.0 .- spe11c_elevation_offset.(y))
+        cells1, lengths1 = _spe11_trajectory_cells(domain, trajectory1; n = 1001)
+        cells2, lengths2 = _spe11_trajectory_cells(domain, trajectory2; n = 11)
+        cells = [cells1; cells2]
+        wells = Vector{Any}(undef, length(cells))
+        for i in eachindex(cells)
+            wells[i] = setup_well(domain, cells[i]; options..., name = Symbol(:INJ, i-1))
+        end
+        rates1 = 50.0.*lengths1./sum(lengths1)
+        rates2 = 50.0.*lengths2./sum(lengths2)
+        domain[:well_cells, nothing] = cells
+        domain[:num_well_cells, nothing] = [length(cells1), length(cells2)]
+        domain[:well_rates, nothing] = [rates1; rates2].*si_unit(:kilogram)./si_unit(:second)
+    end
+    return wells
 end
 
 function reservoir_domain_and_wells_csp11(pth::AbstractString, case = :b; kwarg...)
@@ -164,8 +524,8 @@ function reservoir_domain_and_wells_csp11(pth::AbstractString, case = :b; kwarg.
     elseif case == :c
         w = raw_G["cells"]["wellCells"]
         wc1, wc2 = Int.(vec(w[1])), Int.(vec(w[2]))
-        wells1 = Vector{JutulDarcy.SimpleWell}()
-        wells2 = Vector{JutulDarcy.SimpleWell}()
+        wells1 = Any[]
+        wells2 = Any[]
         i=0
         for iw1 in eachindex(wc1)
             push!(wells1, setup_well(domain, wc1[iw1], simple_well = simple_well, name = Symbol(:INJ, i)))
@@ -277,7 +637,11 @@ function rock_props_from_satnum(satnum, case)
 end
 
 function setup_reservoir_model_csp11(reservoir::DataDomain; include_satfun = true, kwarg...)
-    model, parameters = setup_reservoir_model(reservoir, :co2brine; co2_source = :csp11, kwarg...)
+    model, parameters = setup_reservoir_model(reservoir, :co2brine;
+        co2_source = :csp11,
+        extra_out = true,
+        kwarg...
+    )
     if include_satfun
         pth_data = joinpath(@__DIR__, "..", "..", "small_pyopm", "130_62", "CSP11B_DISGAS.DATA")
         case_cpgrid = setup_case_from_data_file(pth_data)

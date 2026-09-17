@@ -449,8 +449,8 @@ function setup_spe11_wells!(domain::DataDomain, case; divide_c_wells = false, kw
             n1 = length(cells1)
             n2 = length(cells2)
         else
-            I1 = setup_well(domain, cells1; options..., name = :INJ1)
-            I2 = setup_well(domain, cells2; options..., name = :INJ2)
+            I1 = setup_well(domain, cells1; options..., name = :INJ0)
+            I2 = setup_well(domain, cells2; options..., name = :INJ1)
             wells = [I1, I2]
             rates1 = [50.0]
             rates2 = [50.0]

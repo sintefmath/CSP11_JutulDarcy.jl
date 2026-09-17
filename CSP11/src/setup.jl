@@ -446,15 +446,18 @@ function setup_spe11_wells!(domain::DataDomain, case; divide_c_wells = false, kw
             end
             rates1 = 50.0.*lengths1./sum(lengths1)
             rates2 = 50.0.*lengths2./sum(lengths2)
+            n1 = length(cells1)
+            n2 = length(cells2)
         else
             I1 = setup_well(domain, cells1; options..., name = :INJ1)
             I2 = setup_well(domain, cells2; options..., name = :INJ2)
             wells = [I1, I2]
             rates1 = [50.0]
             rates2 = [50.0]
+            n1 = n2 = 1
         end
         domain[:well_cells, nothing] = cells
-        domain[:num_well_cells, nothing] = [length(cells1), length(cells2)]
+        domain[:num_well_cells, nothing] = [n1, n2]
         domain[:well_rates, nothing] = [rates1; rates2].*si_unit(:kilogram)./si_unit(:second)
     end
     return wells

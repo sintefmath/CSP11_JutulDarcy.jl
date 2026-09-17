@@ -31,6 +31,7 @@ function setup_spe11_case(domain_or_dims;
         nstep_injection2 = 50,
         nstep_migration = 100,
         use_reporting_steps = true,
+        divide_c_wells = false,
         kgrad = :tpfa,
         kwarg...
     )
@@ -48,7 +49,7 @@ function setup_spe11_case(domain_or_dims;
     end
 
     if isnothing(wells)
-        wells = setup_spe11_wells!(domain, case; well_kwargs...)
+        wells = setup_spe11_wells!(domain, case; divide_c_wells = divide_c_wells, well_kwargs...)
     elseif !haskey(domain, :well_cells)
         throw(ArgumentError("A domain used with custom wells must define domain[:well_cells]"))
     end
@@ -421,7 +422,7 @@ function _spe11_trajectory_cells(domain, trajectory; n = 501)
     return cells, lengths
 end
 
-function setup_spe11_wells!(domain::DataDomain, case; kwarg...)
+function setup_spe11_wells!(domain::DataDomain, case; divide_c_wells = false, kwarg...)
     default_options = (simple_well = true, radius = 0.15, dir = :y)
     options = merge(default_options, values(kwarg))
     if case == :b
@@ -438,12 +439,20 @@ function setup_spe11_wells!(domain::DataDomain, case; kwarg...)
         cells1, lengths1 = _spe11_trajectory_cells(domain, trajectory1; n = 1001)
         cells2, lengths2 = _spe11_trajectory_cells(domain, trajectory2; n = 11)
         cells = [cells1; cells2]
-        wells = Vector{Any}(undef, length(cells))
-        for i in eachindex(cells)
-            wells[i] = setup_well(domain, cells[i]; options..., name = Symbol(:INJ, i-1))
+        if divide_c_wells
+            wells = Vector{Any}(undef, length(cells))
+            for i in eachindex(cells)
+                wells[i] = setup_well(domain, cells[i]; options..., name = Symbol(:INJ, i-1))
+            end
+            rates1 = 50.0.*lengths1./sum(lengths1)
+            rates2 = 50.0.*lengths2./sum(lengths2)
+        else
+            I1 = setup_well(domain, cells1; options..., name = :INJ1)
+            I2 = setup_well(domain, cells2; options..., name = :INJ2)
+            wells = [I1, I2]
+            rates1 = [50.0]
+            rates2 = [50.0]
         end
-        rates1 = 50.0.*lengths1./sum(lengths1)
-        rates2 = 50.0.*lengths2./sum(lengths2)
         domain[:well_cells, nothing] = cells
         domain[:num_well_cells, nothing] = [length(cells1), length(cells2)]
         domain[:well_rates, nothing] = [rates1; rates2].*si_unit(:kilogram)./si_unit(:second)

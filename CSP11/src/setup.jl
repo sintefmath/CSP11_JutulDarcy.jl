@@ -94,10 +94,7 @@ function _setup_spe11_case(domain, wells;
     model, parameters = setup_reservoir_model_csp11(domain;
         wells = wells,
         thermal = thermal,
-        backend = :csr,
-        general_ad = false,
         dT_max_abs = 30.0,
-        split_wells = true,
         kgrad = kgrad,
         kwarg...
     )

@@ -787,7 +787,7 @@ function spe11_saturation_functions(satnum)
             # The deck used a two-point fallback for the impermeable facies.
             Jutul.LinearInterpolant(
                 [0.0, 1.0], [0.0, spe11_max_capillary_pressure];
-                constant_dx = true
+                constant_dx = false
             )
         else
             entry_pressure = spe11_leverett_coefficient*sqrt(

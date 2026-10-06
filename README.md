@@ -31,7 +31,17 @@ case_b, name_b = setup_spe11_case((400, 60); case = :b)
 
 # 85 by 50 by 40 cells in x/y/depth, warped into the physical C geometry
 case_c, name_c = setup_spe11_case((85, 50, 40); case = :c)
+
+# Inject through reservoir sources, without well/facility models
+case_sources, _ = setup_spe11_case((85, 50, 40); case = :c, use_wells = false)
 ```
+
+`use_wells` defaults to `true` and is also accepted by
+`setup_spe11_case_from_mrst_grid`. Source mode keeps the prescribed CO₂ mass
+rates, injection schedule and temperature. Cartesian C sources distribute
+each injector's rate by trajectory length inside each cell; MAT grids retain
+their prescribed per-cell rates. Thermal sources inject energy at the stream
+temperature using the reservoir's constant-volume model and local pressure.
 
 An already constructed `DataDomain` can be used in the same way. It must
 contain permeability and porosity; facies are inferred from the bundled

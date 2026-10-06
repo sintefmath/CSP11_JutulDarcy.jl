@@ -21,5 +21,6 @@ module CSP11
     # include("props.jl")
     # include("reading.jl")
     include("setup.jl")
+    include("sources.jl")
 
 end # module CSP11

@@ -17,11 +17,16 @@ An existing domain is augmented in-place with benchmark wells, reporting
 regions, observation points and boundary conditions. It must provide
 `:permeability` and `:porosity`; `:satnum` is inferred from the geometry when
 missing.
+
+Set `use_wells=false` to inject CO₂ through reservoir source terms instead of
+well and facility models. Rates, injection periods and temperature are retained;
+SPE11C rates are distributed along each trajectory by its length in each cell.
 """
 function setup_spe11_case(domain_or_dims;
         case = :b,
         name = nothing,
         wells = nothing,
+        use_wells::Bool = true,
         input_data = Dict{String, Any}("spe11_case" => String(case)),
         domain_kwargs = NamedTuple(),
         well_kwargs = NamedTuple(),
@@ -49,7 +54,7 @@ function setup_spe11_case(domain_or_dims;
     end
 
     if isnothing(wells)
-        wells = setup_spe11_wells!(domain, case; divide_c_wells = divide_c_wells, well_kwargs...)
+        wells = setup_spe11_wells!(domain, case; use_wells, divide_c_wells = divide_c_wells, well_kwargs...)
     elseif !haskey(domain, :well_cells)
         throw(ArgumentError("A domain used with custom wells must define domain[:well_cells]"))
     end
@@ -61,6 +66,7 @@ function setup_spe11_case(domain_or_dims;
         name = name,
         input_data = input_data,
         thermal = thermal,
+        use_wells = use_wells,
         nstep_initialization = nstep_initialization,
         nstep_injection1 = nstep_injection1,
         nstep_injection2 = nstep_injection2,
@@ -76,6 +82,7 @@ function _setup_spe11_case(domain, wells;
         name,
         input_data,
         thermal,
+        use_wells = true,
         nstep_initialization,
         nstep_injection1,
         nstep_injection2,
@@ -91,9 +98,23 @@ function _setup_spe11_case(domain, wells;
         othername = "isothermal"
     end
     name = "spe11$(case)_$(name)_$(othername)_$kgrad"
+    if !use_wells
+        name *= "_sources"
+        if !isempty(wells)
+            # The MAT path supplies separate point wells and prescribed rates.
+            # Also permit custom wells by spreading their rate over perforations.
+            cells = [copy(physical_representation(w).perforations.reservoir) for w in wells]
+            if !haskey(domain, :spe11_source_cells) || domain[:spe11_source_cells] != cells
+                domain[:spe11_source_cells, nothing] = cells
+                domain[:spe11_source_weights, nothing] = [fill(1/length(c), length(c)) for c in cells]
+            end
+        elseif !haskey(domain, :spe11_source_cells)
+            throw(ArgumentError("Source mode requires SPE11 injection cells"))
+        end
+    end
 
     model, parameters = setup_reservoir_model_csp11(domain;
-        wells = wells,
+        wells = use_wells ? wells : [],
         thermal = thermal,
         dT_max_abs = 30.0,
         kgrad = kgrad,
@@ -125,7 +146,8 @@ function _setup_spe11_case(domain, wells;
             nstep_injection1 = nstep_injection1,
             nstep_injection2 = nstep_injection2,
             nstep_migration = nstep_migration,
-            use_reporting_steps = use_reporting_steps
+            use_reporting_steps = use_reporting_steps,
+            use_wells = use_wells
         );
     elseif case == :c
         rate_injection1 = deepcopy(domain[:well_rates])
@@ -145,7 +167,8 @@ function _setup_spe11_case(domain, wells;
             nstep_migration = nstep_migration,
             rate_injection1 = rate_injection1,
             rate_injection2 = rate_injection2,
-            use_reporting_steps = use_reporting_steps
+            use_reporting_steps = use_reporting_steps,
+            use_wells = use_wells
         );
     end
 
@@ -167,6 +190,7 @@ call [`setup_spe11_case`](@ref) with a domain or Cartesian dimensions.
 """
 function setup_spe11_case_from_mrst_grid(basename;
         case = :b,
+        use_wells::Bool = true,
         thermal = true,
         nstep_initialization = thermal*10,
         nstep_injection1 = 50,
@@ -183,6 +207,7 @@ function setup_spe11_case_from_mrst_grid(basename;
         name = basename,
         input_data = matfile,
         thermal = thermal,
+        use_wells = use_wells,
         nstep_initialization = nstep_initialization,
         nstep_injection1 = nstep_injection1,
         nstep_injection2 = nstep_injection2,
@@ -422,7 +447,7 @@ function _spe11_trajectory_cells(domain, trajectory; n = 501)
     return cells, lengths
 end
 
-function setup_spe11_wells!(domain::DataDomain, case; divide_c_wells = false, kwarg...)
+function setup_spe11_wells!(domain::DataDomain, case; use_wells = true, divide_c_wells = false, kwarg...)
     default_options = (simple_well = true, radius = 0.15, dir = :y)
     options = merge(default_options, values(kwarg))
     if case == :b
@@ -430,8 +455,10 @@ function setup_spe11_wells!(domain::DataDomain, case; divide_c_wells = false, kw
         points = vec(reinterpret(SVector{3, Float64}, cc))
         well_points = ([2700.0, 0.5, 900.0], [5100.0, 0.5, 500.0])
         well_cells = [find_closest_point(points, p) for p in well_points]
-        wells = [setup_well(domain, well_cells[i]; options..., name = Symbol(:INJ, i-1)) for i in 1:2]
+        wells = use_wells ? [setup_well(domain, well_cells[i]; options..., name = Symbol(:INJ, i-1)) for i in 1:2] : []
         domain[:well_cells, nothing] = well_cells
+        source_cells = [[c] for c in well_cells]
+        source_weights = [[1.0], [1.0]]
     else
         trajectory1 = [2700.0 1000.0 900.0; 2700.0 4000.0 900.0]
         y = collect(range(1000.0, 4000.0, length = 101))
@@ -440,18 +467,23 @@ function setup_spe11_wells!(domain::DataDomain, case; divide_c_wells = false, kw
         cells2, lengths2 = _spe11_trajectory_cells(domain, trajectory2; n = 11)
         cells = [cells1; cells2]
         if divide_c_wells
-            wells = Vector{Any}(undef, length(cells))
-            for i in eachindex(cells)
-                wells[i] = setup_well(domain, cells[i]; options..., name = Symbol(:INJ, i-1))
+            wells = Any[]
+            if use_wells
+                for i in eachindex(cells)
+                    push!(wells, setup_well(domain, cells[i]; options..., name = Symbol(:INJ, i-1)))
+                end
             end
+            source_cells = [[c] for c in cells]
+            source_weights = [[1.0] for c in cells]
             rates1 = 50.0.*lengths1./sum(lengths1)
             rates2 = 50.0.*lengths2./sum(lengths2)
             n1 = length(cells1)
             n2 = length(cells2)
         else
-            I1 = setup_well(domain, cells1; options..., name = :INJ0)
-            I2 = setup_well(domain, cells2; options..., name = :INJ1)
-            wells = [I1, I2]
+            wells = use_wells ? [setup_well(domain, cells1; options..., name = :INJ0),
+                setup_well(domain, cells2; options..., name = :INJ1)] : []
+            source_cells = [cells1, cells2]
+            source_weights = [lengths1./sum(lengths1), lengths2./sum(lengths2)]
             rates1 = [50.0]
             rates2 = [50.0]
             n1 = n2 = 1
@@ -460,6 +492,8 @@ function setup_spe11_wells!(domain::DataDomain, case; divide_c_wells = false, kw
         domain[:num_well_cells, nothing] = [n1, n2]
         domain[:well_rates, nothing] = [rates1; rates2].*si_unit(:kilogram)./si_unit(:second)
     end
+    domain[:spe11_source_cells, nothing] = source_cells
+    domain[:spe11_source_weights, nothing] = source_weights
     return wells
 end
 
@@ -818,6 +852,7 @@ function setup_reservoir_model_csp11(reservoir::DataDomain; include_satfun = tru
 end
 
 function setup_reservoir_forces_and_timesteps_csp11(model, case = :b;
+        use_wells = true,
         well_labels = (:INJ0, :INJ1),
         nstep_initialization = 1,
         nstep_injection1 = 1,
@@ -859,8 +894,16 @@ function setup_reservoir_forces_and_timesteps_csp11(model, case = :b;
     forces = Dict{Symbol, Any}[]
 
     new_period!(time_total, nsteps, forces_for_step) = add_timesteps_and_forces!(dt, forces, time_total, nsteps, forces_for_step)
-    
-    if case == :b
+
+    if !use_wells
+        no_forces = setup_reservoir_forces(model)
+        new_period!(time_initialization, nstep_initialization, no_forces)
+        forces_injection1 = spe11_source_forces(model, rate_injection1, injection_temperature)
+        new_period!(time_injection1, nstep_injection1, forces_injection1)
+        forces_injection2 = spe11_source_forces(model, rate_injection2, injection_temperature)
+        new_period!(time_injection2, nstep_injection2, forces_injection2)
+        new_period!(time_migration, nstep_migration, no_forces)
+    elseif case == :b
         w1, w2 = well_labels
 
         # Disable all wells for injection and migration

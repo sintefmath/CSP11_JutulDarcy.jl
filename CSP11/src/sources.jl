@@ -37,31 +37,22 @@ function Jutul.apply_forces_to_equation!(acc, storage, model::SimulationModel,
     return acc
 end
 
-spe11_source_heat_capacity(variable, state, cell, pressure, temperature) =
-    state.ComponentHeatCapacity[2, cell]
-
-function spe11_source_heat_capacity(variable::JutulDarcy.PressureTemperatureDependentVariable,
-        state, cell, pressure, temperature)
-    region = JutulDarcy.region(variable.regions, cell)
-    table = JutulDarcy.table_by_region(variable.tab, region)
-    return table(pressure, temperature)[2]
-end
-
 function Jutul.apply_forces_to_equation!(acc, storage, model::SimulationModel,
         eq::ConservationLaw{:TotalThermalEnergy}, eq_s, sources::AbstractVector{SPE11Source}, time)
     state = Jutul.evaluation_state(storage)
     density = model.secondary_variables[:PhaseMassDensities]
-    capacity = get(model.secondary_variables, :ComponentHeatCapacity, nothing)
+    internal_energy = model.secondary_variables[:FluidInternalEnergy]
     map = Jutul.global_map(model.domain)
     Jutul.threaded_loop(length(sources), model.context) do i
         @inbounds source = sources[i]
         cell = Jutul.full_cell(source.cell, map)
         @inbounds pressure = state.Pressure[cell]
         rho_co2 = density.tab(pressure, source.temperature)[2]
-        cv = spe11_source_heat_capacity(capacity, state, cell, pressure, source.temperature)
-        # Match the well path's constant-volume thermal model for pure CO₂:
+        u_co2 = JutulDarcy.tabulated_internal_energy(internal_energy,
+            pressure, source.temperature, cell)[2]
+        # Use JutulDarcy's internal energy reference state for pure CO₂:
         # h = u + p/rho, evaluated at injection temperature and local pressure.
-        enthalpy = cv*source.temperature + pressure/rho_co2
+        enthalpy = u_co2 + pressure/rho_co2
         @inbounds acc[1, source.cell] -= source.value*enthalpy
     end
     return acc

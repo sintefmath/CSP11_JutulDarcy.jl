@@ -108,8 +108,9 @@ end
         if thermal
             model = reservoir_model(case.model)
             nc = number_of_cells(domain)
-            state = (Pressure = case.state0[:Reservoir][:Pressure],
-                ComponentHeatCapacity = case.parameters[:Reservoir][:ComponentHeatCapacity])
+            @test model.secondary_variables[:FluidInternalEnergy] isa JutulDarcy.PressureTemperatureDependentInternalEnergy
+            @test !haskey(case.parameters[:Reservoir], :ComponentHeatCapacity)
+            state = (Pressure = case.state0[:Reservoir][:Pressure],)
             storage = (state = state,)
             mass, energy = zeros(2, nc), zeros(1, nc)
             Jutul.apply_forces_to_equation!(mass, storage, model,
@@ -122,12 +123,14 @@ end
                 cell, temperature = source.cell, source.temperature
                 pressure = state.Pressure[cell]
                 density = model.secondary_variables[:PhaseMassDensities].tab(pressure, temperature)[2]
+                u_co2 = JutulDarcy.tabulated_internal_energy(
+                    model.secondary_variables[:FluidInternalEnergy], pressure, temperature, cell)[2]
+                @test energy[1, cell] ≈ -source.value*(u_co2 + pressure/density)
                 control = CSP11.rate_to_injection_control(source.value,
                     last(JutulDarcy.reference_densities(model.system)), temperature)
                 well_state = (Pressure = state.Pressure,
                     Saturations = repeat([0.0, 1.0], 1, nc),
-                    PhaseMassDensities = repeat([1.0, density], 1, nc),
-                    ComponentHeatCapacity = state.ComponentHeatCapacity)
+                    PhaseMassDensities = repeat([1.0, density], 1, nc))
                 enthalpy = JutulDarcy.well_top_node_enthalpy(control, model, well_state, temperature, cell)
                 @test energy[1, cell] ≈ -source.value*enthalpy
             end

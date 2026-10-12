@@ -120,25 +120,7 @@ function _setup_spe11_case(domain, wells;
         kgrad = kgrad,
         kwarg...
     )
-    if case == :b || case == :c
-        if case == :b
-            ref_vol = 9.302242084953952e7
-            ref_pv = 1.779359043963339e7
-        else
-            ref_vol = 1.1232201600000005e12
-            ref_pv = 2.5262622948600012e11
-        end
-        pvt = sum(parameters[:Reservoir][:FluidVolume])
-        volt = sum(model[:Reservoir].data_domain[:volumes])
-        vol_err = abs(volt - ref_vol)/ref_vol
-        if vol_err > 1e-3
-            @warn "Mismatch in volume... $vol_err relative error"
-        end
-        pv_err = abs(pvt - ref_pv)/ref_pv
-        if pv_err > 1e-3
-            @warn "Mismatch in pv... $pv_err relative error"
-        end
-    end
+    check_spe11_volumes(model, parameters, case)
     if case == :b
         forces, dt = CSP11.setup_reservoir_forces_and_timesteps_csp11(model,
             case,
@@ -355,54 +337,130 @@ function _spe11_reporting_regions!(domain, case)
     return domain
 end
 
-function _spe11_boundary_conditions!(domain, case)
-    if !haskey(domain, :boundary)
-        satnum = domain[:satnum]
-        volumes = domain[:volumes]
-        buffer_cells = Int[]
-        boundary_centroids = domain[:boundary_centroids]
-        ymin, ymax = extrema(boundary_centroids[2, :])
-        ytol = max(1.0, ymax - ymin)*1e-8
-        for face in eachindex(domain[:boundary_neighbors])
-            normal = domain[:boundary_normals][:, face]
-            cell = domain[:boundary_neighbors][face]
-            on_x_side = abs(normal[1]) > abs(normal[2]) + abs(normal[3])
-            y = boundary_centroids[2, face]
-            on_c_front_or_back = case == :c && (abs(y - ymin) <= ytol || abs(y - ymax) <= ytol)
-            if (on_x_side || on_c_front_or_back) && satnum[cell] in 2:5
-                volumes[cell] += 5e4*domain[:boundary_areas][face]
-                push!(buffer_cells, cell)
-            end
+function _spe11_buffer_volumes(domain, case)
+    case in (:b, :c) || throw(ArgumentError("Only SPE11 cases :b and :c are supported"))
+    satnum = domain[:satnum]
+    buffer = zeros(eltype(domain[:volumes]), length(satnum))
+    boundary_centroids = domain[:boundary_centroids]
+    isempty(domain[:boundary_neighbors]) && return buffer
+    xmin, xmax = extrema(boundary_centroids[1, :])
+    ymin, ymax = extrema(boundary_centroids[2, :])
+    xtol = max(1.0, xmax - xmin)*1e-8
+    ytol = max(1.0, ymax - ymin)*1e-8
+    facies = case == :b ? (2:5) : (2:6)
+    for face in eachindex(domain[:boundary_neighbors])
+        cell = domain[:boundary_neighbors][face]
+        x, y = boundary_centroids[1, face], boundary_centroids[2, face]
+        on_x_side = abs(x - xmin) <= xtol || abs(x - xmax) <= xtol
+        on_c_front_or_back = case == :c && (abs(y - ymin) <= ytol || abs(y - ymax) <= ytol)
+        if (on_x_side || on_c_front_or_back) && satnum[cell] in facies
+            # Add every eligible face, including both faces of corner cells.
+            buffer[cell] += spe11_buffer_length*domain[:boundary_areas][face]
         end
-        unique!(buffer_cells)
-        domain[:boundary, nothing] = buffer_cells
-        is_boundary = falses(number_of_cells(domain))
-        is_boundary[buffer_cells] .= true
-        domain[:is_boundary, Cells()] = is_boundary
     end
+    return buffer
+end
 
-    if !haskey(domain, :spe11_fixed_temperature_boundaries)
-        z_mid = median(domain[:cell_centroids][3, :])
-        top_cells = Int[]
-        bottom_cells = Int[]
-        for face in eachindex(domain[:boundary_neighbors])
-            normal = domain[:boundary_normals][:, face]
-            if abs(normal[3]) > abs(normal[1]) + abs(normal[2])
-                cell = domain[:boundary_neighbors][face]
-                if domain[:boundary_centroids][3, face] > z_mid
-                    push!(bottom_cells, cell)
-                else
-                    push!(top_cells, cell)
-                end
-            end
+function _spe11_boundary_conditions!(domain, case)
+    if !haskey(domain, :spe11_physical_volumes)
+        if haskey(domain, :boundary)
+            # An existing domain may already contain legacy buffer volumes.
+            physical = tpfv_geometry(physical_representation(domain)).volumes
+        else
+            physical = copy(domain[:volumes])
         end
-        unique!(top_cells)
-        unique!(bottom_cells)
-        domain[:rock_heat_capacity][top_cells] .*= 1e5
-        domain[:rock_heat_capacity][bottom_cells] .*= 1e5
-        domain[:spe11_fixed_temperature_boundaries, nothing] = true
+        domain[:spe11_physical_volumes, Cells()] = physical
     end
+    buffer = _spe11_buffer_volumes(domain, case)
+    domain[:spe11_buffer_volumes, Cells()] = buffer
+    domain[:volumes, Cells()] = domain[:spe11_physical_volumes] .+ buffer
+    is_boundary = buffer .> 0
+    domain[:boundary, nothing] = findall(is_boundary)
+    domain[:is_boundary, Cells()] = is_boundary
+
+    thermal_faces = Int[]
+    for face in eachindex(domain[:boundary_neighbors])
+        normal = domain[:boundary_normals][:, face]
+        if abs(normal[3]) > abs(normal[1]) + abs(normal[2])
+            push!(thermal_faces, face)
+        end
+    end
+    if haskey(domain, :spe11_fixed_temperature_boundaries) && domain[:spe11_fixed_temperature_boundaries]
+        # Migrate domains already prepared by the heat-capacity approximation.
+        cells = unique(domain[:boundary_neighbors][thermal_faces])
+        domain[:rock_heat_capacity][cells] ./= 1e5
+        domain[:spe11_fixed_temperature_boundaries, nothing] = false
+    end
+    domain[:spe11_thermal_boundary_faces, nothing] = thermal_faces
     return domain
+end
+
+_spe11_geothermal_temperature(depth) = 70.0 - 0.025*(1200.0 - depth) + 273.15
+
+function _spe11_thermal_boundary_conditions(model)
+    rmodel = JutulDarcy.reservoir_model(model)
+    JutulDarcy.model_is_thermal(rmodel) || return nothing
+    domain = reservoir_domain(model)
+    phi = domain[:porosity]
+    # The impermeable top/bottom facies contain water. Match the reservoir's
+    # parallel rock/fluid conductivity, using the physical boundary geometry.
+    fluid = domain[:fluid_thermal_conductivity]
+    water = fluid isa AbstractVector ? fluid : vec(fluid[1, :])
+    conductivity = (1.0 .- phi).*domain[:rock_thermal_conductivity] .+ phi.*water
+    trans = compute_boundary_trans(domain, conductivity)
+    # Aggregate by cell so even a one-layer grid has one force per cell. This
+    # avoids concurrent writes when forces are evaluated by device kernels.
+    conductance = Dict{Int, Float64}()
+    weighted_temperature = Dict{Int, Float64}()
+    for face in domain[:spe11_thermal_boundary_faces]
+        cell = domain[:boundary_neighbors][face]
+        t = trans[face]
+        temperature = _spe11_geothermal_temperature(domain[:boundary_centroids][3, face])
+        conductance[cell] = get(conductance, cell, 0.0) + t
+        weighted_temperature[cell] = get(weighted_temperature, cell, 0.0) + t*temperature
+    end
+    return [FlowBoundaryCondition(cell, 3e7, weighted_temperature[cell]/conductance[cell];
+        trans_flow = 0.0, trans_thermal = conductance[cell])
+        for cell in sort!(collect(keys(conductance))) if conductance[cell] > 0.0]
+end
+
+"""
+    check_spe11_volumes(model, parameters, case)
+
+Check physical geometry, lateral buffer storage and initialized model pore
+volume. Returns measured and integrated reference volumes in cubic metres.
+Facies discretization differences are logged at debug level; inconsistent
+geometry or model storage produces warnings with actual and expected values.
+"""
+function check_spe11_volumes(model, parameters, case)
+    domain = reservoir_domain(model)
+    reference = spe11_reference_volumes(case)
+    physical = sum(domain[:spe11_physical_volumes])
+    expected_bulk = physical + sum(_spe11_buffer_volumes(domain, case))
+    bulk = sum(domain[:volumes])
+    expected_pore = sum(pore_volume(domain))
+    pore = sum(pore_volume(model, parameters))
+    function check(message, actual, expected; rtol = 1e-8)
+        relative_error = abs(actual - expected)/expected
+        if !isfinite(relative_error) || relative_error > rtol
+            @warn message actual expected relative_error
+        end
+    end
+    check("SPE11 physical bulk volume differs from the specified domain dimensions",
+        physical, reference.physical_bulk)
+    check("SPE11 effective bulk volume is inconsistent with the mesh and lateral buffer areas",
+        bulk, expected_bulk)
+    check("SPE11 model pore volume is inconsistent with the reservoir domain",
+        pore, expected_pore)
+    bulk_error = abs(bulk - reference.bulk)/reference.bulk
+    pore_error = abs(pore - reference.pore)/reference.pore
+    if max(bulk_error, pore_error) > 1e-3
+        # Sampling facies at cell centres changes their volumes on coarse
+        # meshes. Report this discretization error without a setup warning.
+        @debug "SPE11 discretized storage volumes differ from the integrated facies geometry" bulk pore reference_bulk = reference.bulk reference_pore = reference.pore bulk_relative_error = bulk_error pore_relative_error = pore_error
+    end
+    return (physical = physical, bulk = bulk, pore = pore, reference = reference,
+        bulk_relative_error = bulk_error, pore_relative_error = pore_error)
 end
 
 function _spe11_observation_points!(domain, case)
@@ -432,6 +490,7 @@ function prepare_spe11_domain!(domain::DataDomain, case)
         satnum = [spe11_facies(cc[1, i], cc[2, i], cc[3, i]; case = case) for i in axes(cc, 2)]
         domain[:satnum, Cells()] = satnum
     end
+    domain[:porosity][domain[:satnum] .== 7] .= spe11_facies7_porosity
     _add_spe11_thermal_properties!(domain)
     _spe11_reporting_regions!(domain, case)
     _spe11_boundary_conditions!(domain, case)
@@ -509,7 +568,6 @@ function reservoir_domain_and_wells_csp11(pth::AbstractString, case = :b; kwarg.
         @assert haskey(matdata, "cells")
         raw_G = matdata
     end
-    buffer_cells = Int.(vec(raw_G["bufferCells"]))
     G = UnstructuredMesh(MRSTWrapMesh(raw_G), z_is_depth = true)
     satnum = Int.(vec(raw_G["cells"]["tag"]))
     # TODO: Special perm transform for case C
@@ -524,36 +582,10 @@ function reservoir_domain_and_wells_csp11(pth::AbstractString, case = :b; kwarg.
         end
         @. K = max(K, 1e-10*si_unit(:darcy))
         poro = collect(vec(raw_rock["poro"]))
-        poro[poro .< 0.05] .= 0.05
+        poro[satnum .== 7] .= spe11_facies7_porosity
     end
     domain = reservoir_domain_csp11(G, case; satnum = satnum, permeability = K, porosity = poro, kwarg...)
-    volume = domain[:volumes]
-    for buffer_cell in buffer_cells
-        # TODO: Check this definition for B & C!
-        # Set 6 as well following Jan's post.
-        if satnum[buffer_cell] in (2, 3, 4, 5, 6)
-            volume[buffer_cell] *= (1.0 + 5e4)
-        end
-    end
-    # @. domain[:volumes][buffer_cells] *= raw_G["bufferMult"]
-    cc = domain[:cell_centroids]
-    z = cc[3, :]
-    z_mid = median(z)
-    top_cells = Int[]
-    bottom_cells = Int[]
-    for i in 1:number_of_boundary_faces(G)
-        N = domain[:boundary_normals][:, i]
-        if abs(N[3]) > abs(N[1]) + abs(N[2])
-            c = domain[:boundary_neighbors][i]
-            if domain[:boundary_centroids][3, i] > z_mid
-                push!(bottom_cells, c)
-            else
-                push!(top_cells, c)
-            end
-        end
-    end
-    domain[:rock_heat_capacity][top_cells] *= 1e5
-    domain[:rock_heat_capacity][bottom_cells] *= 1e5
+    _spe11_boundary_conditions!(domain, case)
 
     simple_well = true
     if case == :b
@@ -592,19 +624,12 @@ function reservoir_domain_and_wells_csp11(pth::AbstractString, case = :b; kwarg.
     B = raw_G["cells"]["fractionInB"]
     C = raw_G["cells"]["fractionInC"]
 
-    boundary = Int.(vec(raw_G["bufferCells"]))
     domain[:A, Cells()] = vec(A)
     domain[:B, Cells()] = vec(B)
     domain[:C, Cells()] = vec(C)
-    nc = number_of_cells(domain)
-    is_boundary = fill(false, nc)
-    for bcell in boundary
-        is_boundary[bcell] = true
-    end
-    domain[:is_boundary, Cells()] = is_boundary
-    domain[:boundary, nothing] = boundary
 
     # Obervation points
+    nc = number_of_cells(domain)
     pts = domain[:cell_centroids]
     pts = vec(reinterpret(Jutul.StaticArrays.SVector{3, Float64}, pts))
     p1 = find_closest_point(pts, pop_1_coords)
@@ -619,12 +644,15 @@ function reservoir_domain_and_wells_csp11(pth::AbstractString, case = :b; kwarg.
     return domain, wells, matdata
 end
 
-function reservoir_domain_csp11(G, case = :b; satnum, temperature = 333.15, kwarg...)
+function reservoir_domain_csp11(G, case = :b; satnum, temperature = 333.15,
+        porosity = last(rock_props_from_satnum(satnum, case)), kwarg...)
     maximum(satnum) == 7 || throw(ArgumentError("Must have 7 as highest SATNUM region"))
     minimum(satnum) == 1 || throw(ArgumentError("Must have 1 as lowest SATNUM region"))
     nc = number_of_cells(G)
     length(satnum) == nc || throw(ArgumentError("satnum must have number of cells entries ($nc), was $(length(satnum))"))
-    domain = reservoir_domain(G; satnum = satnum, kwarg...)
+    porosity = porosity isa Real ? fill(porosity, nc) : copy(porosity)
+    porosity[satnum .== 7] .= spe11_facies7_porosity
+    domain = reservoir_domain(G; satnum = satnum, porosity = porosity, kwarg...)
     # TODO: Move over perm and poro assignment here.
     if case == :b || case == :c
         rock_thermal_conductivity = fill(0.85, nc)
@@ -659,7 +687,7 @@ function rock_props_from_satnum(satnum, case)
     @assert minimum(satnum) >= 1
     @assert maximum(satnum) <= 7
     MINPERM = 1e-10*si_unit(:darcy)
-    MINPORO = 0.05
+    MINPORO = spe11_facies7_porosity
     if case == :a
         z_factor = 1.0
         # Note: Last entry was 0, capped to very small perm and small poro
@@ -951,6 +979,13 @@ function setup_reservoir_forces_and_timesteps_csp11(model, case = :b;
         @assert length(dt) == 201
     end
 
+    bc = _spe11_thermal_boundary_conditions(model)
+    if !isnothing(bc)
+        for force in forces
+            force[:Reservoir] = merge(force[:Reservoir], (bc = bc,))
+        end
+    end
+
     return (forces, dt)
 end
 
@@ -989,7 +1024,7 @@ function setup_state0_csp11(model, case = :b)
     p0 = 3e7
     # TODO: Improve this
     p = @. p0 + (z - z0)*JutulDarcy.gravity_constant*1000.0
-    T0 = @. 70 − 0.025.*(1200.0 - z) + 273.15
+    T0 = _spe11_geothermal_temperature.(z)
     state0 = setup_reservoir_state(model, OverallMoleFractions = [1.0, 0.0], Pressure = p, Temperature = T0)
     return state0
 end

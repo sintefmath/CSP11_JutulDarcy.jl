@@ -2,6 +2,10 @@ using CSP11
 using Jutul
 using JutulDarcy
 using Test
+using Logging
+
+include("volumes.jl")
+include("thermal_boundaries.jl")
 
 @testset "SPE11 geometry" begin
     @test CSP11.spe11_facies(2700.0, 300.0) in 1:7

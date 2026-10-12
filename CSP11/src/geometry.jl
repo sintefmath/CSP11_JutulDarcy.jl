@@ -4,6 +4,8 @@ const spe11_size_x = 8400.0
 const spe11_size_y = 5000.0
 const spe11_size_z = 1200.0
 const spe11_geometry_scale = (3000.0, 1000.0)
+const spe11_facies7_porosity = 0.001
+const spe11_buffer_length = 5e4
 const _spe11_geometry_cache = Ref{Any}(nothing)
 
 """
@@ -79,6 +81,50 @@ function _spe11_geometry()
         _spe11_geometry_cache[] = _read_spe11_geometry()
     end
     return _spe11_geometry_cache[]
+end
+
+"""
+    spe11_reference_volumes(case)
+
+Physical and effective storage volumes integrated from the bundled facies
+polygons, including the lateral boundary buffers. Pore volumes include the
+small facies-7 porosity used to keep the flow equations well-defined.
+"""
+function spe11_reference_volumes(case)
+    case in (:b, :c) || throw(ArgumentError("Only SPE11 cases :b and :c are supported"))
+    areas = zeros(7)
+    side_lengths = zeros(7)
+    scale_x, scale_z = spe11_geometry_scale
+    xmax = spe11_size_x/scale_x
+    for p in _spe11_geometry()
+        polygon = p.polygon
+        signed_area = 0.0
+        for i in eachindex(polygon)
+            a, b = polygon[i], polygon[mod1(i + 1, length(polygon))]
+            signed_area += a[1]*b[2] - b[1]*a[2]
+            if (isapprox(a[1], 0.0; atol = 1e-10) && isapprox(b[1], 0.0; atol = 1e-10)) ||
+                    (isapprox(a[1], xmax; atol = 1e-10) && isapprox(b[1], xmax; atol = 1e-10))
+                side_lengths[p.facies] += scale_z*abs(b[2] - a[2])
+            end
+        end
+        areas[p.facies] += abs(signed_area)*scale_x*scale_z/2
+    end
+    thickness = case == :b ? 1.0 : spe11_size_y
+    boundary_areas = side_lengths.*thickness
+    if case == :c
+        # The C mapping preserves both volume and the areas of the lateral
+        # boundary planes. Front and back each contain the B cross-section.
+        boundary_areas .+= 2 .* areas
+    end
+    facies = case == :b ? (2:5) : (2:6)
+    porosity = [0.1, 0.2, 0.2, 0.2, 0.25, 0.35, spe11_facies7_porosity]
+    physical_bulk = sum(areas)*thickness
+    physical_pore = sum(areas.*porosity)*thickness
+    buffer_bulk = spe11_buffer_length*sum(boundary_areas[facies])
+    buffer_pore = spe11_buffer_length*sum((boundary_areas.*porosity)[facies])
+    return (physical_bulk = physical_bulk, physical_pore = physical_pore,
+        buffer_bulk = buffer_bulk, buffer_pore = buffer_pore,
+        bulk = physical_bulk + buffer_bulk, pore = physical_pore + buffer_pore)
 end
 
 function _point_on_segment(x, y, a, b; atol = 100*eps(Float64))

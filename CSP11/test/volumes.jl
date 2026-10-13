@@ -5,7 +5,7 @@
         dims = specase == :b ? (2, 1, 2) : (2, 2, 2)
         sizes = specase == :b ? (8.0, 1.0, 4.0) : (8.0, 6.0, 4.0)
         nc = prod(dims)
-        tags = fill(specase == :b ? 2 : 6, nc)
+        tags = fill(2, nc)
         tags[end-1:end] = [1, 7]
         domain = reservoir_domain(CartesianMesh(dims, sizes);
             satnum = tags, permeability = 1e-13, porosity = 0.2)
@@ -39,19 +39,24 @@ end
 @testset "SPE11 integrated volume references" begin
     b = CSP11.spe11_reference_volumes(:b)
     c = CSP11.spe11_reference_volumes(:c)
+    a = CSP11.spe11_reference_volumes(:a)
+    @test a.physical_bulk ≈ 2.8*0.01*1.2
+    @test a.bulk == a.physical_bulk
+    @test a.pore == a.physical_pore
+    @test a.buffer_bulk == a.buffer_pore == 0.0
     @test b.physical_bulk ≈ 8400.0*1200.0
     @test c.physical_bulk ≈ 8400.0*5000.0*1200.0
     @test c.physical_pore ≈ 5000.0*b.physical_pore
     # Independent reference totals from integration of the published polygons.
     @test b.bulk ≈ 9.383552519e7
     @test b.pore ≈ 2.051114471635e7
-    @test c.bulk ≈ 1.169297820017e12
-    @test c.pore ≈ 2.631109065785e11
-    @test_throws ArgumentError CSP11.spe11_reference_volumes(:a)
+    @test c.bulk ≈ 1.1615512576601074e12
+    @test c.pore ≈ 2.6039960975358762e11
+    @test_throws ArgumentError CSP11.spe11_reference_volumes(:d)
 end
 
 @testset "SPE11 volume diagnostics" begin
-    schedule = (thermal = false, use_wells = false, nstep_initialization = 0,
+    schedule = (thermal = false, nstep_initialization = 0,
         nstep_injection1 = 1, nstep_injection2 = 1, nstep_migration = 1,
         use_reporting_steps = false)
     for (specase, dims) in ((:b, (20, 10)), (:c, (12, 6, 8)))

@@ -20,7 +20,7 @@ for cases_to_run in allcases
     for kg in kgrad_to_run
         for basename in cases_to_run
             specase = Symbol(basename[1])
-            case, name = setup_spe11_case_from_mrst_grid(basename,
+            case, name = setup_spe11_case(Tuple(parse.(Int, split(basename[3:end], 'x'))),
                 case = specase,
                 thermal = true,
                 use_reporting_steps = true,
@@ -30,7 +30,7 @@ for cases_to_run in allcases
             nc = number_of_cells(domain)
             println("Running case $name with $nc cells")
             pth = jutul_output_path(name, subfolder = "csp11_delivery_aug30")
-            hook, csv_pth, f = CSP11.get_reporting_hook(pth, domain, specase = specase)
+            hook, csv_pth = CSP11.get_reporting_hook(pth, domain, specase = specase)
             simulate_reservoir(case,
                 output_path = pth,
                 max_timestep = 1*si_unit(:year),

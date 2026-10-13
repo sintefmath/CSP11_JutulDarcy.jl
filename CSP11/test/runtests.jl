@@ -112,7 +112,8 @@ end
         if thermal
             model = reservoir_model(case.model)
             nc = number_of_cells(domain)
-            @test model.secondary_variables[:FluidInternalEnergy] isa JutulDarcy.PressureTemperatureDependentInternalEnergy
+            @test model.secondary_variables[:FluidEnthalpy] isa JutulDarcy.PressureTemperatureDependentEnthalpy
+            @test model.secondary_variables[:FluidInternalEnergy] isa JutulDarcy.FluidInternalEnergyFromFluidEnthalpy
             @test !haskey(case.parameters[:Reservoir], :ComponentHeatCapacity)
             state = (Pressure = case.state0[:Reservoir][:Pressure],)
             storage = (state = state,)
@@ -127,9 +128,8 @@ end
                 cell, temperature = source.cell, source.temperature
                 pressure = state.Pressure[cell]
                 density = model.secondary_variables[:PhaseMassDensities].tab(pressure, temperature)[2]
-                u_co2 = JutulDarcy.tabulated_internal_energy(
-                    model.secondary_variables[:FluidInternalEnergy], pressure, temperature, cell)[2]
-                @test energy[1, cell] ≈ -source.value*(u_co2 + pressure/density)
+                enthalpy_table = only(model.secondary_variables[:FluidEnthalpy].tab)
+                @test energy[1, cell] ≈ -source.value*enthalpy_table(pressure, temperature)[2]
                 control = CSP11.rate_to_injection_control(source.value,
                     last(JutulDarcy.reference_densities(model.system)), temperature)
                 well_state = (Pressure = state.Pressure,

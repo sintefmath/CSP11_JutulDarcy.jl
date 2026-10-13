@@ -916,6 +916,10 @@ function setup_reservoir_forces_and_timesteps_csp11(model, case = :b;
     forces = Dict{Symbol, Any}[]
 
     new_period!(time_total, nsteps, forces_for_step) = add_timesteps_and_forces!(dt, forces, time_total, nsteps, forces_for_step)
+    tables = JutulDarcy.CO2Properties.co2_brine_property_tables()
+    H_tab = tables[:enthalpy]
+    co2_H_eval(p, T) = H_tab(p, T)[2]
+    H_well = co2_H_eval
 
     if !use_wells
         no_forces = setup_reservoir_forces(model)
@@ -934,16 +938,16 @@ function setup_reservoir_forces_and_timesteps_csp11(model, case = :b;
 
         # First injection period
         ctrl1 = Dict{Symbol, Any}()
-        ctrl1[w1] = rate_to_injection_control(first(rate_injection1), rho_co2, injection_temperature)
-        ctrl1[w2] = rate_to_injection_control(last(rate_injection1), rho_co2, injection_temperature)
+        ctrl1[w1] = rate_to_injection_control(first(rate_injection1), rho_co2, injection_temperature, enthalpy = H_well)
+        ctrl1[w2] = rate_to_injection_control(last(rate_injection1), rho_co2, injection_temperature, enthalpy = H_well)
 
         forces_injection1 = setup_reservoir_forces(model, control = ctrl1)
         new_period!(time_injection1, nstep_injection1, forces_injection1)
 
         # Second injection period
         ctrl2 = Dict{Symbol, Any}()
-        ctrl2[w1] = rate_to_injection_control(first(rate_injection2), rho_co2, injection_temperature)
-        ctrl2[w2] = rate_to_injection_control(last(rate_injection2), rho_co2, injection_temperature)
+        ctrl2[w1] = rate_to_injection_control(first(rate_injection2), rho_co2, injection_temperature, enthalpy = H_well)
+        ctrl2[w2] = rate_to_injection_control(last(rate_injection2), rho_co2, injection_temperature, enthalpy = H_well)
 
         forces_injection2 = setup_reservoir_forces(model, control = ctrl2)
         new_period!(time_injection2, nstep_injection2, forces_injection2)

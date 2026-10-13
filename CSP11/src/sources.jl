@@ -41,21 +41,32 @@ function Jutul.apply_forces_to_equation!(acc, storage, model::SimulationModel,
         eq::ConservationLaw{:TotalThermalEnergy}, eq_s, sources::AbstractVector{SPE11Source}, time)
     state = Jutul.evaluation_state(storage)
     density = model.secondary_variables[:PhaseMassDensities]
-    internal_energy = model.secondary_variables[:FluidInternalEnergy]
+    fluid_enthalpy = model.secondary_variables[:FluidEnthalpy]
     map = Jutul.global_map(model.domain)
     Jutul.threaded_loop(length(sources), model.context) do i
         @inbounds source = sources[i]
         cell = Jutul.full_cell(source.cell, map)
         @inbounds pressure = state.Pressure[cell]
-        rho_co2 = density.tab(pressure, source.temperature)[2]
-        u_co2 = JutulDarcy.tabulated_internal_energy(internal_energy,
-            pressure, source.temperature, cell)[2]
-        # Use JutulDarcy's internal energy reference state for pure CO₂:
-        # h = u + p/rho, evaluated at injection temperature and local pressure.
-        enthalpy = u_co2 + pressure/rho_co2
+        enthalpy = spe11_source_enthalpy(fluid_enthalpy, density, state,
+            pressure, source.temperature, cell)
         @inbounds acc[1, source.cell] -= source.value*enthalpy
     end
     return acc
+end
+
+# Use the same energy model and reference state as the reservoir and wells.
+# In particular, a tabulated enthalpy is already h, so no p/rho term is added.
+function spe11_source_enthalpy(var::JutulDarcy.PressureTemperatureDependentEnthalpy,
+        density, state, pressure, temperature, cell)
+    reg = JutulDarcy.region(var.regions, cell)
+    tab = JutulDarcy.table_by_region(var.tab, reg)
+    return tab(pressure, temperature)[2]
+end
+
+function spe11_source_enthalpy(::JutulDarcy.FluidEnthalpy,
+        density, state, pressure, temperature, cell)
+    rho_co2 = density.tab(pressure, temperature)[2]
+    return state.ComponentHeatCapacity[2, cell]*temperature + pressure/rho_co2
 end
 
 function Jutul.subforce(sources::AbstractVector{SPE11Source}, model)

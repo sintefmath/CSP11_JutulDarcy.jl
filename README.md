@@ -1,5 +1,9 @@
 # CSP11_JutulDarcy.jl
 
+> [!IMPORTANT]
+> Much of the functionality of this repository has been migrated into the JutulDarcy CSP11 submodule. This repository is primarily of interest if you want to run the exact MRST meshes used to submit to the comparison study.
+
+
 Simulate the [CSP11](https://www.spe.org/en/csp/) CO2 storage benchmark using [JutulDarcy.jl](https://github.com/sintefmath/JutulDarcy.jl)  on meshes made in [MRST](https://mrst.no/). Currently contains scripts for case B and C only (or experimentally on custom meshes).
 
 ## First time setup
